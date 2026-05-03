@@ -1,2 +1,3 @@
 - [ ] [t2hs] 2026-05-03: how to decide where to place repo.yaml? An env var holds it?
 - [ ] [7lhk] 2026-05-03: repo init zsh - sounds misleading. repo completions zsh - sounds better
+- [ ] [outb] 2026-05-03: Have a subcommnd to sync all repos (pull + push) - even just pull or push - both all and specific variants
