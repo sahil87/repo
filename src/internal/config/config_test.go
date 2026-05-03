@@ -2,7 +2,6 @@ package config
 
 import (
 	"bytes"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,7 +97,4 @@ func TestWriteStarterRefusesOverwrite(t *testing.T) {
 	if !bytes.Equal(got, original) {
 		t.Fatalf("file content modified after refusal")
 	}
-
-	// Suppress unused import warning if any
-	_ = errors.Is
 }

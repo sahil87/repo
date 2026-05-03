@@ -78,16 +78,27 @@ func resolveOne(cmd *cobra.Command, query string) (*repos.Repo, error) {
 			return nil, errSilent
 		}
 		// fzf returns exit 130 on Esc/Ctrl-C → treat as cancellation.
-		return nil, errFzfCancelled
+		// Any other failure (non-130 exit, I/O error) surfaces as a real error.
+		if code, ok := proc.ExitCode(err); ok && code == 130 {
+			return nil, errFzfCancelled
+		}
+		return nil, fmt.Errorf("repo: fzf failed: %w", err)
 	}
 
-	chosenName := strings.SplitN(selected, "\t", 2)[0]
+	// Match the full selected line back to its source Repo. fzf returns the same
+	// tab-delimited triple we piped in (name\tpath\turl); Path is unique per repo,
+	// so matching on it disambiguates the case where two repos share a derived name.
+	parts := strings.SplitN(selected, "\t", 3)
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("repo: malformed fzf selection %q", selected)
+	}
+	chosenPath := parts[1]
 	for i := range rs {
-		if rs[i].Name == chosenName {
+		if rs[i].Path == chosenPath {
 			return &rs[i], nil
 		}
 	}
-	return nil, fmt.Errorf("repo: selection %q not found in repo list", chosenName)
+	return nil, fmt.Errorf("repo: selection %q not found in repo list", selected)
 }
 
 // resolveAndPrint resolves a single repo via resolveOne and prints its absolute path to stdout.

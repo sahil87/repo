@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -47,5 +46,4 @@ func TestCloneStatePathExistsNotGit(t *testing.T) {
 	if got != statePathExistsNotGit {
 		t.Fatalf("expected statePathExistsNotGit, got %v", got)
 	}
-	_ = errors.New
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"strings"
 	"testing"
 
 	"github.com/sahil87/repo/internal/proc"
@@ -100,6 +99,3 @@ func equalStringSlice(a, b []string) bool {
 	}
 	return true
 }
-
-// Suppress unused import warning if any
-var _ = strings.Join
