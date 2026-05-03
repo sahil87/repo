@@ -1,0 +1,6 @@
+{"action":"enter","driver":"fab-new","event":"stage-transition","stage":"intake","ts":"2026-05-03T08:32:48Z"}
+{"args":"Cross-platform release pipeline (goreleaser + GitHub Actions + homebrew-tap)","cmd":"fab-new","event":"command","ts":"2026-05-03T08:32:48Z"}
+{"delta":"+0.0","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-03T08:33:59Z"}
+{"delta":"+0.0","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-03T08:34:06Z"}
+{"delta":"+0.0","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-03T08:48:02Z"}
+{"delta":"+0.0","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-03T08:48:07Z"}

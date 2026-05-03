@@ -1,0 +1,37 @@
+id: iu93
+name: 260503-iu93-bootstrap-go-binary
+created: 2026-05-03T07:46:04Z
+created_by: sahil-weaver
+change_type: fix
+issues: []
+progress:
+    intake: ready
+    spec: pending
+    tasks: pending
+    apply: pending
+    review: pending
+    hydrate: pending
+    ship: pending
+    review-pr: pending
+checklist:
+    generated: false
+    path: checklist.md
+    completed: 0
+    total: 0
+confidence:
+    certain: 22
+    confident: 4
+    tentative: 0
+    unresolved: 0
+    score: 3.8
+    indicative: true
+    fuzzy: true
+    dimensions:
+        signal: 96.2
+        reversibility: 72.5
+        competence: 92.5
+        disambiguation: 92.3
+stage_metrics:
+    intake: {started_at: "2026-05-03T07:46:04Z", driver: fab-new, iterations: 1}
+prs: []
+last_updated: 2026-05-03T08:46:20Z

@@ -1,8 +1,8 @@
-id: iu93
-name: 260503-iu93-bootstrap-go-binary-specs
-created: 2026-05-03T07:46:04Z
+id: dgq0
+name: 260503-dgq0-release-pipeline
+created: 2026-05-03T08:32:48Z
 created_by: sahil-weaver
-change_type: docs
+change_type: fix
 issues: []
 progress:
     intake: ready
@@ -19,19 +19,19 @@ checklist:
     completed: 0
     total: 0
 confidence:
-    certain: 21
+    certain: 6
     confident: 5
-    tentative: 0
+    tentative: 4
     unresolved: 0
-    score: 3.5
+    score: 0.0
     indicative: true
     fuzzy: true
     dimensions:
-        signal: 96.0
-        reversibility: 72.7
-        competence: 92.7
-        disambiguation: 92.3
+        signal: 80.0
+        reversibility: 79.0
+        competence: 86.0
+        disambiguation: 81.3
 stage_metrics:
-    intake: {started_at: "2026-05-03T07:46:04Z", driver: fab-new, iterations: 1}
+    intake: {started_at: "2026-05-03T08:32:48Z", driver: fab-new, iterations: 1}
 prs: []
-last_updated: 2026-05-03T08:03:45Z
+last_updated: 2026-05-03T08:48:07Z

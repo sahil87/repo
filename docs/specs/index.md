@@ -13,3 +13,7 @@
 
 | Spec | Description |
 |------|-------------|
+| [cli-surface](cli-surface.md) | Subcommands, args, flags, exit codes, stdout/stderr conventions, match resolution algorithm |
+| [config-resolution](config-resolution.md) | `repos.yaml` search order, schema, `repo config init` flow, embedded starter content |
+| [architecture](architecture.md) | `src/` layout, Go package responsibilities, wrapper boundaries, cross-platform strategy |
+| [build-and-release](build-and-release.md) | Justfile, scripts/, goreleaser intent, GitHub Actions, homebrew-tap (release pipeline deferred to follow-up change) |
