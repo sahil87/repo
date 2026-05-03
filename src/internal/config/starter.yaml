@@ -1,0 +1,11 @@
+# Repositories to clone, grouped by parent directory.
+# Each key is a directory (~ is expanded). Values are git clone URLs.
+#
+# Edit this file to add your own repos. Tip: set $REPOS_YAML in your shell rc
+# to point at a version-tracked location (a git-tracked dotfile, Dropbox, etc.)
+# so this config moves with you across machines.
+#
+# Example below: clones the `repo` tool itself. Replace or extend.
+
+~/code/sahil87:
+  - git@github.com:sahil87/repo.git
