@@ -1,6 +1,6 @@
 # Local Build
 
-How v0.0.1 of `repo` is built and installed locally. Cross-platform release pipeline (goreleaser, GitHub Actions, homebrew-tap) is deferred to a follow-up change.
+How `repo` is built and installed locally. The cross-platform release pipeline (GitHub Actions, homebrew-tap) lives in [release-pipeline](release-pipeline.md).
 
 ## Justfile
 
@@ -18,9 +18,12 @@ install:
 
 test:
     cd src && go test ./...
+
+release bump="patch":
+    ./scripts/release.sh {{bump}}
 ```
 
-No `release` recipe in v0.0.1.
+The `release` recipe delegates to `scripts/release.sh` and is documented in [release-pipeline](release-pipeline.md).
 
 ## `scripts/build.sh`
 
@@ -76,16 +79,6 @@ cd src && GOOS=linux GOARCH=amd64 go build ./...
 
 Both succeed because `internal/platform/` uses build tags (`//go:build darwin`, `//go:build linux`). Runtime tests run on the host platform only.
 
-## Out of scope for v0.0.1
+## Cross-references
 
-The following are deferred to a follow-up release-pipeline change (`260503-dgq0-release-pipeline`):
-
-- `.goreleaser.yaml` (build matrix: darwin-arm64/amd64, linux-arm64/amd64; no Windows).
-- `.github/workflows/release.yml` (tag-push trigger).
-- `homebrew-tap` formula publication.
-- `HOMEBREW_TAP_TOKEN` provisioning.
-- The first `v0.0.1` git tag and GitHub Release.
-- A `release` recipe in the justfile.
-- Code signing / notarization.
-
-Design intent for the deferred pipeline is captured in `docs/specs/build-and-release.md`.
+The cross-platform release pipeline (tag-driven workflow, formula template, `release.sh`, homebrew-tap update) is documented in [release-pipeline](release-pipeline.md). Pre-implementation design intent lives in `docs/specs/build-and-release.md`.

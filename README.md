@@ -2,13 +2,27 @@
 
 A small Go CLI for locating, opening, and cloning repositories listed in `repos.yaml`. Drives subcommands like `repo <name>` (print path), `repo code <name>` (open VSCode), `repo open <name>` (file manager), `repo cd <name>` (shell function), `repo clone --all`, and `repo ls`.
 
-## Install (from source)
+## Install
+
+### Homebrew (macOS and Linux)
+
+```sh
+brew install sahil87/tap/repo
+```
+
+### GitHub Release tarball
+
+Download the appropriate tar.gz for your platform from the [latest release](https://github.com/sahil87/repo/releases/latest) — assets are named `repo-{os}-{arch}.tar.gz` (where `{os}` is `darwin` or `linux` and `{arch}` is `arm64` or `amd64`). Extract and place the `repo` binary on your `$PATH`.
+
+### From source
 
 ```sh
 just install
 ```
 
 Builds the binary and copies it to `~/.local/bin/repo`. Make sure that directory is on your `$PATH`.
+
+## Shell integration
 
 For the shell-function form of `repo cd` (and zsh tab completion):
 

@@ -9,3 +9,6 @@ install:
 
 test:
     cd src && go test ./...
+
+release bump="patch":
+    ./scripts/release.sh {{bump}}
