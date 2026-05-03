@@ -38,7 +38,7 @@ Behavior:
 
 ## Workflow steps (`.github/workflows/release.yml`)
 
-Single job (`release`) on `ubuntu-latest`, `permissions: contents: write` (no other scopes), six steps:
+Single job (`release`) on `ubuntu-latest`, `permissions: contents: write` (no other scopes), seven steps:
 
 1. **Checkout** with `fetch-depth: 0` — needed for the previous-tag-base computation.
 2. **Setup Go** with `go-version-file: src/go.mod` — keeps the CI Go version in lockstep with `go.mod`.

@@ -2,7 +2,7 @@ id: dgq0
 name: 260503-dgq0-release-pipeline
 created: 2026-05-03T08:32:48Z
 created_by: sahil-weaver
-change_type: feat
+change_type: fix
 issues: []
 progress:
     intake: done
@@ -16,7 +16,7 @@ progress:
 checklist:
     generated: true
     path: checklist.md
-    completed: 67
+    completed: 0
     total: 67
 confidence:
     certain: 25
@@ -41,4 +41,4 @@ stage_metrics:
     review-pr: {started_at: "2026-05-03T19:46:10Z", driver: git-pr, iterations: 1}
 prs:
     - https://github.com/sahil87/repo/pull/2
-last_updated: 2026-05-03T19:46:10Z
+last_updated: 2026-05-03T20:00:24Z

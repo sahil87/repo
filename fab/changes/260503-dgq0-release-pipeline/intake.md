@@ -70,13 +70,13 @@ The git tag is the source of truth (no `VERSION` file).
 - **Local builds** (`scripts/build.sh`, unchanged): use `git describe --tags --always 2>/dev/null || echo dev`. Produces `v0.0.1` on tagged commits, `v0.0.1-2-gabc123` on commits past a tag, short SHA pre-tag, `dev` if no git history.
 - **Release builds** (workflow): extract version from the pushed tag via `${GITHUB_REF#refs/tags/}`. Inject as `-X main.version=v0.0.1` (with `v` prefix preserved for output consistency).
 - **Formula update** (workflow): strip the `v` prefix once for templating Ruby's `version "0.0.1"` field — the formula's URL string is `releases/download/v#{version}/...` which already adds the `v` back.
-- **Print form**: `repo --version` always prints `repo <whatever-was-injected>`. Output examples:
-  - Local tagged: `repo v0.0.1`
-  - Local post-tag: `repo v0.0.1-2-gabc123`
-  - Local pre-tag: `repo a08147d`
-  - Local no-git: `repo dev`
-  - Release: `repo v0.0.1`
-  - Built without any ldflags (e.g., `go install ...` directly): `repo unknown`
+- **Print form**: `repo --version` always prints `repo version <whatever-was-injected>` (cobra's auto-generated format from `rootCmd.Version`). Output examples:
+  - Local tagged: `repo version v0.0.1`
+  - Local post-tag: `repo version v0.0.1-2-gabc123`
+  - Local pre-tag: `repo version a08147d`
+  - Local no-git: `repo version dev`
+  - Release: `repo version v0.0.1`
+  - Built without any ldflags (e.g., `go install ...` directly): `repo version dev` (the parent change wired `var version = "dev"` as the default)
 
 ### Spec rewrite scope
 
@@ -233,7 +233,7 @@ After apply + review pass:
 4. Watch the workflow at `https://github.com/sahil87/repo/actions`.
 5. Verify `https://github.com/sahil87/repo/releases/tag/v0.0.1` has 4 tar.gz binaries (no separate `checksums.txt` — checksums are computed inline by the workflow and only used for the formula update).
 6. Verify `sahil87/homebrew-tap` got a new commit adding `Formula/repo.rb`.
-7. Smoke test in a clean shell: `brew install sahil87/tap/repo && repo --version` prints `repo v0.0.1`.
+7. Smoke test in a clean shell: `brew install sahil87/tap/repo && repo --version` prints `repo version v0.0.1`.
 
 Steps 1–2 cannot be done by the apply agent (they require GitHub UI and external repo state). Steps 3–7 happen *after* this change is merged — they are not part of apply.
 
@@ -286,7 +286,7 @@ All open items are tracked in the Assumptions table below as Confident or Tentat
 | 1, 7-9, 13 | Release tooling: goreleaser or hand-rolled? | Mirror `~/code/sahil87/run-kit`'s hand-rolled workflow shape. Release notes via `softprops/action-gh-release` `generate_release_notes: true` with run-kit's minor-aware base-tag logic (patch == 0 → previous minor's first tag). `.github/formula-template.rb` in the source repo, sed-substituted at release time. Direct push to `homebrew-tap` (no PR). |
 | n/a | Version printing: `--version` flag, `version` subcommand, or skip? | `--version` flag (lighter than a subcommand; respects Constitution Principle VI Minimal Surface Area). |
 | 11, 16 | Version source of truth: `VERSION` file (run-kit pattern) or git tags? | Git tags. `repo` is single-binary, so the run-kit `VERSION`-file rationale (multi-binary monorepo) doesn't apply. Local builds use `git describe`, release builds use the pushed tag. `release.sh` computes the next tag from `git describe --tags --abbrev=0` with `v0.0.0` fallback. |
-| 17 | `--version` output when no ldflags injected? | `repo unknown`. Strings produced by `git describe` and the workflow tag-extract already include the `v` prefix on tagged commits, so no prefix is added in Go. |
+| 17 | `--version` output when no ldflags injected? | `repo version dev` — the parent change already wired `var version = "dev"` as the default, so a binary built without `-X main.version=...` falls back to `dev`. (Earlier intake drafts proposed `repo unknown`; superseded by the on-disk parent-change wiring.) Strings produced by `git describe` and the workflow tag-extract already include the `v` prefix on tagged commits, so no prefix is added in Go. |
 | 14 | Prerelease support (`v0.0.1-rc.N`) for the first release? | No. Mirror run-kit — `release.sh` accepts only `patch\|minor\|major`. Can be added later if iterative testing becomes valuable. |
 | 15 | Linux native packaging (.deb / .rpm) for v0.0.1? | No — tar.gz only. Linux users install via brew-on-Linux or direct download. Native packaging is a follow-up if user demand surfaces. |
 | 21 | `docs/specs/build-and-release.md` rewrite — in this change or follow-up? | In this change. Apply stage rewrites the goreleaser-flavored sections; acceptance criterion #9 verifies. |

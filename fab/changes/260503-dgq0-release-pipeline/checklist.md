@@ -37,7 +37,7 @@
 - [x] CHK-029 Spec file rewrite: Design Decision #7 says "not in scope" for code signing (not "deferred"). Verified at line 230.
 - [x] CHK-030 Spec file rewrite: behavioral scenarios use `just release patch` (not `git tag -a v0.0.1 -m ... && git push origin v0.0.1`). Verified at lines 211–215.
 - [x] CHK-031 Spec file rewrite: behavioral scenarios reference `4 tar.gz archives` (not `4 binary archives + checksums.txt`). Verified at line 214.
-- [x] CHK-032 Spec file rewrite: Version Reporting table no longer documents the cobra `repo version` subcommand row (the subcommand still exists at runtime via cobra-default; the spec just doesn't enumerate it as a documented public surface). Verified at lines 78–83.
+- [x] CHK-032 Spec file rewrite: Version Reporting table no longer documents the cobra `repo version` subcommand row. Note: at runtime the cobra-default `version` subcommand is shadowed by the parent change's positional `repo <name>` handler (so `repo version` triggers an fzf lookup, not a version print) — consistent with CHK-003. The spec correctly de-documents it as a public surface. Verified at lines 78–83.
 
 ## Behavioral Correctness
 

@@ -147,7 +147,7 @@ Used by `repo`, `repo <name>`, `repo path`, `repo code`, `repo open`, `repo cd`,
 > **THEN** stdout is a single line containing the version string (e.g., `v0.0.1` or `v0.0.1-2-gabc123` for dev builds from `git describe`)
 > **AND** exit code is 0
 
-> **NOTE**: The cobra-default `repo version` subcommand MAY also work (no effort spent suppressing it). The flag forms are the documented interface.
+> **NOTE**: Cobra auto-wires a `repo version` subcommand from `rootCmd.Version`, but at runtime it is shadowed by the positional `repo <name>` handler — invoking `repo version` triggers an fzf lookup for a repo named "version", not a version print. The flag forms (`--version`, `-v`) are the documented and only working interface.
 
 ### External Tool Availability
 
@@ -224,5 +224,5 @@ Cobra's default for unknown commands and parse errors is exit 1, which is accept
 
 1. **`repo cd` is intentionally split between binary and shell function.** The binary cannot change its parent shell's `cwd`; the function wrapper (emitted by `repo shell-init zsh`) does. The binary's role is to print a hint when invoked directly, so users discover the shell integration.
 2. **`fzf` is invoked lazily, not preflighted.** Subcommands that don't need fzf (`repo ls`, `repo shell-init zsh`, `repo config *`, exact-match resolutions) work without it installed. This matters for minimal environments and CI.
-3. **`-v` / `--version` are required; `version` subcommand is tolerated.** Cobra auto-wires both when `rootCmd.Version` is set; we don't suppress the subcommand. The flags are the documented form.
+3. **`-v` / `--version` are required; `version` subcommand is shadowed.** Cobra auto-wires both when `rootCmd.Version` is set, but the subcommand is shadowed at runtime by the positional `repo <name>` handler, so it does not actually print the version. The flags are the documented and working form.
 4. **Match algorithm preserves bash behavior exactly.** Case-insensitive substring on the *name* column only (not path, not URL). Exactly-1-match short-circuits fzf. This is a behavioral parity requirement of the migration.

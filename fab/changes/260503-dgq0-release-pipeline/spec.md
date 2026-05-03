@@ -66,12 +66,14 @@ The release workflow SHALL read the version from `${GITHUB_REF#refs/tags/}`. It 
 
 ### Requirement: Version printing surface
 
-The binary SHALL expose its version string via `repo --version`, `repo -v`, and `repo version`. All three SHALL produce identical output. This requirement is satisfied by the parent change's existing cobra wiring; no additional code changes apply in this change.
+The binary SHALL expose its version string via `repo --version` and `repo -v`. Both SHALL produce identical output. This requirement is satisfied by the parent change's existing cobra wiring; no additional code changes apply in this change.
 
-#### Scenario: All three forms produce identical output
+> Note: cobra also auto-wires a `repo version` subcommand from `rootCmd.Version`, but at runtime it is shadowed by the parent change's positional `repo <name>` handler, so `repo version` triggers an fzf lookup for a repo named "version" rather than a version print. The flag forms (`--version`, `-v`) are the documented public surface; `repo version` is not.
+
+#### Scenario: Flag forms produce identical output
 
 - **GIVEN** a binary built with `main.version=v0.0.1`
-- **WHEN** the user runs `repo --version`, `repo -v`, or `repo version` (separate invocations)
+- **WHEN** the user runs `repo --version` or `repo -v` (separate invocations)
 - **THEN** each invocation prints `repo version v0.0.1`
 - **AND** each exits 0
 
@@ -79,7 +81,7 @@ The binary SHALL expose its version string via `repo --version`, `repo -v`, and 
 
 ### Requirement: `scripts/release.sh` accepts a bump-type argument
 
-`scripts/release.sh` SHALL accept exactly one positional argument: `patch`, `minor`, or `major`. It SHALL exit 1 with a usage message for any other input (no arguments, multiple arguments, unknown values).
+`scripts/release.sh` SHALL accept exactly one positional argument: `patch`, `minor`, or `major`. It SHALL exit 1 with a usage message for unknown values or multiple bump-type arguments. Bare invocation (no arguments) SHALL print usage and exit 0 (informational, mirroring run-kit) — this is documented as a separate scenario below.
 
 #### Scenario: Valid bump type
 

@@ -24,8 +24,6 @@ usage() {
   echo "  major — bump major version (e.g. 0.1.0 → 1.0.0)"
 }
 
-repo_root="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-
 # ── Parse arguments ──────────────────────────────────────────────────
 
 bump_type=""
@@ -34,9 +32,9 @@ for arg in "$@"; do
   case "$arg" in
     patch|minor|major)
       if [ -n "$bump_type" ]; then
-        echo "ERROR: Multiple bump types specified: '$bump_type' and '$arg'."
-        echo ""
-        usage
+        echo "ERROR: Multiple bump types specified: '$bump_type' and '$arg'." >&2
+        echo "" >&2
+        usage >&2
         exit 1
       fi
       bump_type="$arg"
@@ -46,9 +44,9 @@ for arg in "$@"; do
       exit 0
       ;;
     *)
-      echo "ERROR: Unknown argument '$arg'. Use: patch, minor, or major."
-      echo ""
-      usage
+      echo "ERROR: Unknown argument '$arg'. Use: patch, minor, or major." >&2
+      echo "" >&2
+      usage >&2
       exit 1
       ;;
   esac
@@ -62,16 +60,20 @@ if [ -z "$bump_type" ]; then
   exit 0
 fi
 
+# ── Resolve repo root (only after we know we have real work to do) ───
+
+repo_root="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+
 # ── Pre-flight ───────────────────────────────────────────────────────
 
 if [ -n "$(git -C "$repo_root" status --porcelain)" ]; then
-  echo "ERROR: Working tree not clean. Commit or stash changes first."
+  echo "ERROR: Working tree not clean. Commit or stash changes first." >&2
   exit 1
 fi
 
 branch=$(git -C "$repo_root" branch --show-current)
 if [ -z "$branch" ]; then
-  echo "ERROR: Not on a branch (detached HEAD). Check out a branch before releasing."
+  echo "ERROR: Not on a branch (detached HEAD). Check out a branch before releasing." >&2
   exit 1
 fi
 

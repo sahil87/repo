@@ -14,9 +14,13 @@ brew install sahil87/tap/repo
 
 Download the appropriate tar.gz for your platform from the [latest release](https://github.com/sahil87/repo/releases/latest) — assets are named `repo-{os}-{arch}.tar.gz` (where `{os}` is `darwin` or `linux` and `{arch}` is `arm64` or `amd64`). Extract and place the `repo` binary on your `$PATH`.
 
+> **macOS Gatekeeper note**: The released binaries are not signed or notarized (out of scope for now — see `docs/specs/build-and-release.md`). On first run, macOS will block the binary with `"repo" cannot be opened because the developer cannot be verified`. To allow it, either run `xattr -d com.apple.quarantine /path/to/repo` once after extracting, or open System Settings → Privacy & Security and click "Allow Anyway" after the first blocked attempt. Homebrew installs typically don't trigger this since brew strips the quarantine attribute.
+
 ### From source
 
 ```sh
+git clone https://github.com/sahil87/repo.git
+cd repo
 just install
 ```
 
