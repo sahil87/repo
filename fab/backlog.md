@@ -1,0 +1,2 @@
+- [ ] [t2hs] 2026-05-03: how to decide where to place repo.yaml? An env var holds it?
+- [ ] [7lhk] 2026-05-03: repo init zsh - sounds misleading. repo completions zsh - sounds better
