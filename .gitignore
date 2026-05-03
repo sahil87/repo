@@ -30,3 +30,17 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+.fab-*
+
+/.agents
+
+/.claude
+
+/.cursor
+
+/.opencode
+
+/.codex
+
+/.gemini
