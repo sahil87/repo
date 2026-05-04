@@ -19,6 +19,7 @@ Match resolution algorithm used by `hop`, `hop where`, `hop code`, `hop open`, `
 | `hop shell-init <shell>` | `shell_init.go` | exactly 1 | `zsh` → emits `zshInit` static prefix + cobra-generated `_hop` completion; missing or non-zsh → exit 2 with exact stderr |
 | `hop config init` | `config.go` | none | Writes embedded `starter.yaml` to `ResolveWriteTarget()` |
 | `hop config where` | `config.go` | none | Prints `ResolveWriteTarget()` to stdout (never errors on missing file). Renamed from v0.0.1's `config path` for consistency with `hop where` |
+| `hop update` | `update.go` | none | Self-update via Homebrew. Detects brew install via `os.Executable` + `EvalSymlinks` + `/Cellar/` substring; non-brew installs exit 0 with a manual-update hint. Logic lives in `internal/update`; subprocess calls go through `internal/proc` |
 | `hop -C <name> <cmd>...` | `main.go` | global flag + child argv | Resolves `<name>` to a path, then execs `<cmd>...` with `Dir=<path>` and inherited stdio. Implemented via pre-Execute argv inspection in `main.go::extractDashC`; bypasses cobra subcommand parsing for the post-`<name>` argv |
 | `hop -v` / `hop --version` | cobra | — | Auto-wired by cobra when `rootCmd.Version` is set; output is the `var version` value (default `dev`, overridden via `-ldflags "-X main.version=..."`) |
 | `hop help` / `-h` / `--help` | cobra | — | Cobra-rendered help, with `rootLong` providing the `Usage:` table and `Notes:` block from `root.go` |
@@ -77,8 +78,9 @@ Lazy: only checked when the tool is actually invoked. Exact stderr lines:
 | `git` | `clone.go::gitMissingHint` | `hop: git is not installed.` |
 | `code` | `code.go::codeMissingHint` | `hop code: 'code' command not found. Install VSCode and ensure 'code' is on your PATH.` |
 | `open`/`xdg-open` | `open.go` (formatted) | `hop open: '<tool>' not found.` (`<tool>` from `platform.OpenTool()`) |
+| `brew` | `internal/update` | `hop update: brew not found on PATH.` (only when binary is brew-installed) |
 
-All four trigger `errSilent` (exit 1) after writing to `cmd.ErrOrStderr()`.
+The first four (fzf, git, code, open/xdg-open) trigger `errSilent` (exit 1) directly — the subcommand writes the hint to `cmd.ErrOrStderr()` and returns `errSilent`. `brew` follows a slightly different path: `internal/update.Run` writes the hint and returns `proc.ErrNotFound`; the cobra wrapper in `cmd/hop/update.go` then catches `proc.ErrNotFound` via `errors.Is` and converts it to `errSilent`. The user-visible behavior is identical (single hint line on stderr, exit 1) — the indirection exists so `internal/update` stays free of cobra-specific sentinels.
 
 ## `hop cd` binary-form text
 
@@ -92,7 +94,7 @@ hop: 'cd' is shell-only. Add 'eval "$(hop shell-init zsh)"' to your zshrc, or us
 
 The static portion (`shell_init.go::zshInit`) defines:
 
-- `hop()` function with bare-name dispatch — known subcommands (`cd|clone|where|ls|code|open|shell-init|config|--help|-h|--version|completion`) route through `_hop_dispatch`; flag-prefixed args pass through to `command hop`; everything else is treated as `cd <name>` (the bare-name dispatch).
+- `hop()` function with bare-name dispatch — known subcommands (`cd|clone|where|ls|code|open|shell-init|config|update|--help|-h|--version|completion`) route through `_hop_dispatch`; flag-prefixed args pass through to `command hop`; everything else is treated as `cd <name>` (the bare-name dispatch).
 - `_hop_dispatch()` helper — handles the shell-mutating `cd` path (`command hop where "$2"` then `cd --`), and the URL-detected `clone` path (`cd --` to the printed path on success).
 - `h() { hop "$@"; }` — single-letter alias.
 - `hi() { command hop "$@"; }` — un-shadowed alias (calls the binary directly, bypassing the shim).
@@ -110,3 +112,15 @@ All status lines go to **stderr** (stdout is reserved for resolved paths, used b
 - `summary: cloned=<N> skipped=<M> failed=<F>` (only `--all`)
 
 Clone uses a 10-minute timeout (`clone.go::cloneTimeout`).
+
+## `hop update` — self-update via Homebrew
+
+Implementation in `internal/update`; the cobra factory in `cmd/hop/update.go` is a thin wrapper. The flow:
+
+1. **Detect brew install**: walk `os.Executable()` through `filepath.EvalSymlinks` and check whether the resolved path contains `/Cellar/`. If not, print `hop v<X> was not installed via Homebrew.\nUpdate manually, or reinstall with: brew install sahil87/tap/hop` and exit 0.
+2. **Refresh brew index**: `brew update --quiet` with a 30-second timeout (via `proc.Run` + `context.WithTimeout`). Failure exits 1.
+3. **Query latest version**: `brew info --json=v2 sahil87/tap/hop` and parse `formulae[0].versions.stable`. The formula name is **fully qualified** (`sahil87/tap/hop`) to dodge a name collision with the Homebrew core `hop` cask (an HWP document viewer).
+4. **Compare versions**: normalize both sides by stripping a leading `v` (binary reports `v0.0.3`, brew reports `0.0.3`). If equal, print `Already up to date (v<X>).` and exit 0.
+5. **Upgrade**: `brew upgrade sahil87/tap/hop` with a 120-second timeout. Stream brew's stdout/stderr through to the user via `proc.RunForeground` so progress is visible. On success, print `Updated to v<new>.` and exit 0.
+
+All `brew` invocations route through `internal/proc` (Constitution Principle I — no direct `os/exec` outside `internal/proc`). The package exposes `Run(currentVersion string, out, errOut io.Writer) error` as its single public entry point. The `out`/`errOut` writers receive only the wrapper messages this package emits; subprocess output from `brew` is routed by `internal/proc` to the parent's `os.Stdout`/`os.Stderr` directly. Production callers pass `os.Stdout` and `os.Stderr` (via `cmd.OutOrStdout()` / `cmd.ErrOrStderr()`) to keep both consistent. When `brew` is missing on PATH, `Run` returns `proc.ErrNotFound`; the cobra wrapper converts that to `errSilent` so `translateExit` doesn't print a second error line.

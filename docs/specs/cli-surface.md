@@ -20,6 +20,7 @@
 | `hop shell-init zsh` | `zsh` (required) | Emit zsh function wrapper + cobra-generated completion to stdout | 0 success, 2 unsupported shell |
 | `hop config init` | (none) | Bootstrap a starter `hop.yaml` at the resolved location | 0 written, 1 file exists, 2 write error |
 | `hop config where` | (none) | Print the resolved config path on stdout. Renamed from v0.0.1's `config path`. | 0 resolved, 1 unresolvable |
+| `hop update` | (none) | Self-update the `hop` binary via Homebrew. No-op (with hint) when the binary was not installed via brew. | 0 success, 1 brew failure |
 | `hop -h \| --help \| help` | (none) | Print help text on stdout | 0 |
 | `hop -v \| --version` | (none) | Print version string on stdout | 0 |
 
@@ -239,6 +240,37 @@ The YAML write is **comment-preserving and atomic** (temp file + rename via `int
 
 > **NOTE**: Cobra also auto-wires a `hop version` subcommand from `rootCmd.Version`; this still works (no effort spent suppressing it).
 
+#### `hop update`
+
+`hop update` self-upgrades the binary via Homebrew. It MUST detect whether the binary was installed via brew (by walking `os.Executable` through `EvalSymlinks` and checking for `/Cellar/` in the resolved path); when it wasn't, it MUST exit 0 after printing a hint pointing at the manual install command — the binary cannot upgrade what it didn't install.
+
+The brew formula is referenced as `sahil87/tap/hop` (fully qualified) to disambiguate from the Homebrew core `hop` cask (an HWP document viewer) that would otherwise shadow the formula.
+
+Version comparison MUST normalize the leading `v` — the binary reports versions with the `v` prefix (e.g. `v0.0.3` from the build's `git describe` ldflag), while `brew info --json=v2` reports the bare form (`0.0.3`). The comparison uses the bare form on both sides.
+
+> **GIVEN** the binary was installed via Homebrew and the tap formula is at the same version
+> **WHEN** I run `hop update`
+> **THEN** stdout shows `Current version: v<X>`, then `Checking for updates...`, then `Already up to date (v<X>).`
+> **AND** exit code is 0
+> **AND** `brew upgrade` is NOT invoked
+
+> **GIVEN** the binary was installed via Homebrew and the tap has a newer version
+> **WHEN** I run `hop update`
+> **THEN** stdout shows `Updating v<old> → v<new>...` followed by `brew upgrade` output
+> **AND** on success, stdout ends with `Updated to v<new>.`
+> **AND** exit code is 0
+
+> **GIVEN** the binary was NOT installed via Homebrew (e.g. `just local-install`, manual `go install`, or downloaded tarball)
+> **WHEN** I run `hop update`
+> **THEN** stdout shows `hop v<X> was not installed via Homebrew.` followed by a manual-update hint pointing at `brew install sahil87/tap/hop`
+> **AND** `brew` is NOT invoked
+> **AND** exit code is 0
+
+> **GIVEN** `brew update` or `brew info` fails (network error, brew not on PATH, etc.)
+> **WHEN** I run `hop update`
+> **THEN** stderr shows the failure reason
+> **AND** exit code is 1
+
 ### External Tool Availability
 
 External tools (`fzf`, `git`, `code`, `open`, `xdg-open`) are checked **lazily** — only when the subcommand actually needs them. Subcommands that resolve without an external tool MUST NOT preemptively check or fail.
@@ -250,6 +282,7 @@ External tools (`fzf`, `git`, `code`, `open`, `xdg-open`) are checked **lazily**
 | `code` | `hop code` | Print to stderr: `hop code: 'code' command not found. Install VSCode and ensure 'code' is on your PATH.` Exit 1. |
 | `open` (Darwin) / `xdg-open` (Linux) | `hop open` | Print to stderr: `hop open: '<tool>' not found.` Exit 1. |
 | `<cmd>` | `hop -C <name> <cmd>...` | Print to stderr: `hop: '<cmd>' not found`. Exit 1. |
+| `brew` | `hop update` (when installed via brew) | Print to stderr: `hop update: brew not found on PATH.` Exit 1. |
 
 Subcommands that don't need a tool MUST work without it. Examples:
 - `hop where foo` (when `foo` is a unique substring match) does not invoke fzf — works without `fzf` installed.
@@ -307,3 +340,4 @@ The `-C` flag bypasses cobra entirely and uses `os.Exit` directly with the child
 6. **`hop where` and `hop config where` use the same verb for symmetry.** Both answer "where would this go / where does this resolve to?" The v0.0.1 names (`path`, `config path`) lacked voice-fit with the new binary name and were renamed without aliases (no migration path; the rename was a clean break for v0.x).
 7. **`hop clone <url>` infers form from argument shape.** `looksLikeURL` (contains `://` OR (`@` AND `:`)) splits URL form from name form. This keeps `clone` to one verb rather than `clone-url` / `clone-name`. URLs of registered repos still go through name form via `hop clone <name>` — there's no ambiguity because the URL form requires an actual URL shape.
 8. **Auto-registration on `hop clone <url>` is opt-out, not opt-in.** The default behavior for an ad-hoc URL clone is "I want this in my registry"; `--no-add` is the escape valve. This matches the dominant use case (try a new repo → keep it). The YAML write is comment-preserving (via `internal/yamled`) so registration doesn't trash hand-curated comments.
+9. **`hop update` is a top-level subcommand, not `hop config update` or a flag.** Per Constitution Principle VI, new top-level subcommands need explicit justification. Self-update is a binary-state operation, not config-state — it doesn't fit under `config`, and overloading a flag on the root (e.g. `hop --update`) muddles the bare-form's "print path" semantics. It also matches the convention every Homebrew-installed CLI uses (`fab-kit update`, `gh extension upgrade`). The implementation lives in `internal/update` and routes all subprocess invocations through `internal/proc` per Constitution Principle I (no direct `os/exec` outside `internal/proc`).

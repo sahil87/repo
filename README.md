@@ -1,5 +1,7 @@
 # hop
 
+> Part of [@sahil87's open source toolkit](https://ai.shll.in) — see all projects there.
+
 A small Go CLI for locating, opening, and operating on git repositories listed in `hop.yaml`. The dominant use case is navigation: `hop <name>` prints a path; `h <name>` (the single-letter alias) `cd`s your shell into that repo via the bare-name dispatcher; `hop -C <name> <cmd>...` runs a command inside it without changing your cwd.
 
 ## Install
@@ -9,6 +11,14 @@ A small Go CLI for locating, opening, and operating on git repositories listed i
 ```sh
 brew install sahil87/tap/hop
 ```
+
+To update later:
+
+```sh
+hop update
+```
+
+`hop update` self-upgrades via Homebrew (`brew update` then `brew upgrade sahil87/tap/hop`). When `hop` was installed from source or a release tarball, `hop update` prints a hint and exits without invoking brew.
 
 ### GitHub Release tarball
 

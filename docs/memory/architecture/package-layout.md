@@ -39,6 +39,9 @@ src/
     ├── proc/                     # centralized exec.CommandContext
     │   ├── proc.go               # Run, RunInteractive, RunForeground, ExitCode, ErrNotFound
     │   └── proc_test.go
+    ├── update/                   # self-update via Homebrew
+    │   ├── update.go             # Run(version), brew detect/index/info/upgrade
+    │   └── update_test.go
     └── platform/                 # OS abstraction with build tags
         ├── platform.go           # package doc only
         ├── open_darwin.go        # //go:build darwin
