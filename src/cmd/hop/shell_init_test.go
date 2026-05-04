@@ -37,6 +37,27 @@ func TestShellInitZshContainsHopFunctionAndAliases(t *testing.T) {
 	}
 }
 
+// TestShellInitZshRoutesCobraCompletionToBinary asserts that the emitted hop()
+// shell function explicitly routes cobra's __complete* introspection calls
+// to `command hop` rather than the bare-name dispatcher. Without this branch,
+// the cobra-generated _hop completion script invokes the shell function with
+// `__complete <args>...`, which falls through to the default case and is
+// treated as a repo name (e.g. `cd __complete`) — breaking tab completion for
+// any prefix beyond the empty case.
+func TestShellInitZshRoutesCobraCompletionToBinary(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "__complete*)") {
+		t.Fatalf("expected `__complete*)` case to forward cobra completion to `command hop`, got:\n%s", out)
+	}
+}
+
 func TestShellInitMissingShell(t *testing.T) {
 	_, _, err := runArgs(t, "shell-init")
 	if err == nil {

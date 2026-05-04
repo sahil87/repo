@@ -18,6 +18,13 @@ hop() {
     return $?
   fi
   case "$1" in
+    __complete*)
+      # Cobra-internal completion entrypoints (__complete, __completeNoDesc).
+      # The cobra-generated _hop completion script invokes "hop __complete ..."
+      # to fetch dynamic candidates; without this case the function would route
+      # __complete through the bare-name dispatcher and treat it as a repo name.
+      command hop "$@"
+      ;;
     cd|clone|where|ls|code|open|shell-init|config|update|--help|-h|--version|completion)
       _hop_dispatch "$@"
       ;;
