@@ -190,8 +190,14 @@ func resolveAdHocPath(cfg *config.Config, g *config.Group, url, name string) str
 	if g.Dir != "" {
 		return filepath.Join(repos.ExpandDir(g.Dir, cfg.CodeRoot), name)
 	}
-	org := repos.DeriveOrg(url)
+	// Mirror repos.FromConfig: when cfg.CodeRoot is empty (e.g. user wrote
+	// `code_root: ""`), fall back to "~" so we never produce a relative path
+	// that would land the clone in $PWD.
 	codeRoot := repos.ExpandDir(cfg.CodeRoot, "")
+	if codeRoot == "" {
+		codeRoot = repos.ExpandDir("~", "")
+	}
+	org := repos.DeriveOrg(url)
 	if org == "" {
 		return filepath.Join(codeRoot, name)
 	}

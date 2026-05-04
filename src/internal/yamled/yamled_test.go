@@ -168,11 +168,15 @@ func TestAppendURLNonDefaultIndentRoundTrips(t *testing.T) {
 	}
 }
 
-func TestAppendURLAtomicLeavesOriginalOnRenameFail(t *testing.T) {
+// TestAppendURLLeavesOriginalOnTempCreateFail verifies that when the parent
+// directory is read-only (so os.CreateTemp fails before any write), AppendURL
+// returns an error and the original file is left untouched. This exercises the
+// "tmp creation fails" branch of atomicWrite, not the rename-failure branch —
+// rename failure is much harder to provoke deterministically across platforms.
+func TestAppendURLLeavesOriginalOnTempCreateFail(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("test relies on permission denial; skipping when running as root")
 	}
-	// Make the directory read-only after creating the file, so rename fails.
 	dir := t.TempDir()
 	path := filepath.Join(dir, "hop.yaml")
 	original := `repos:
@@ -202,5 +206,32 @@ func TestAppendURLAtomicLeavesOriginalOnRenameFail(t *testing.T) {
 	}
 	if string(got) != original {
 		t.Errorf("file was modified despite error; got:\n%s", got)
+	}
+}
+
+// TestAppendURLPreservesFileMode verifies that AppendURL retains the original
+// file's permissions on the replacement, instead of inheriting os.CreateTemp's
+// 0600 default. Regression guard for the perm-downgrade reported in PR #5.
+func TestAppendURLPreservesFileMode(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hop.yaml")
+	original := `repos:
+  default:
+    - git@github.com:foo/a.git
+`
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if err := AppendURL(path, "default", "git@github.com:foo/b.git"); err != nil {
+		t.Fatalf("AppendURL: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o644 {
+		t.Errorf("file mode = %o, want 0644 (yamled must preserve original perms, not adopt CreateTemp's 0600)", got)
 	}
 }

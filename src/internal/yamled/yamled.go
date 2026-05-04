@@ -1,7 +1,9 @@
 // Package yamled provides comment-preserving YAML node-level edits.
 //
 // Used by `hop clone <url>` to append a URL to a group's URL list in hop.yaml
-// without rewriting the user's formatting, comments, or indentation.
+// while preserving the user's comments. Indentation is normalized to yaml.v3's
+// defaults on round-trip — comment preservation is the contract; byte-perfect
+// formatting is not.
 //
 // The package operates at the yaml.Node level (not via Marshal/Unmarshal of
 // concrete types) because the standard round-trip through Go structs loses
@@ -114,10 +116,21 @@ func mappingValue(node *yaml.Node, key string) *yaml.Node {
 }
 
 // atomicWrite writes data to path via a temp file in the same directory and a
-// rename. On rename failure, the temp file is removed (best-effort) and the
-// original is left unchanged.
+// rename. The original file's mode is preserved on the replacement (defaulting
+// to 0644 if the original cannot be stat'd), so an append never silently
+// downgrades the user's permissions. On rename failure, the temp file is
+// removed (best-effort) and the original is left unchanged.
 func atomicWrite(path string, data []byte) error {
 	dir := filepath.Dir(path)
+
+	// Capture the original file's mode so we can preserve it. os.CreateTemp
+	// defaults to 0600, which would silently restrict hop.yaml from 0644 to
+	// 0600 on first append.
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	}
+
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp.*")
 	if err != nil {
 		return fmt.Errorf("yamled: create temp in %s: %w", dir, err)
@@ -141,6 +154,11 @@ func atomicWrite(path string, data []byte) error {
 	if err := tmp.Close(); err != nil {
 		cleanup()
 		return fmt.Errorf("yamled: close %s: %w", tmpPath, err)
+	}
+
+	if err := os.Chmod(tmpPath, mode); err != nil {
+		cleanup()
+		return fmt.Errorf("yamled: chmod %s: %w", tmpPath, err)
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
