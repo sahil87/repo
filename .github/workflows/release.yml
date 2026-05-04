@@ -19,6 +19,7 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: src/go.mod
+          cache-dependency-path: src/go.sum
 
       - name: Extract version from tag
         id: version
@@ -29,19 +30,20 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cross-compile
+        working-directory: src
         run: |
-          mkdir -p dist
+          mkdir -p ../dist
           targets="darwin/arm64 darwin/amd64 linux/arm64 linux/amd64"
           for target in $targets; do
             os="${target%/*}"
             arch="${target#*/}"
             output="repo-${os}-${arch}"
             echo "Building ${output}..."
-            mkdir -p "dist/${output}"
+            mkdir -p "../dist/${output}"
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
               go build -ldflags "-X main.version=${{ steps.version.outputs.tag }}" \
-              -o "dist/${output}/repo" ./src/cmd/repo
-            tar -czf "dist/${output}.tar.gz" -C "dist/${output}" repo
+              -o "../dist/${output}/repo" ./cmd/repo
+            tar -czf "../dist/${output}.tar.gz" -C "../dist/${output}" repo
           done
 
       - name: Determine release notes base tag
