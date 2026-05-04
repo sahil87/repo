@@ -25,6 +25,7 @@ Usage:
   hop shell-init zsh     emit zsh shell integration (use: eval "$(hop shell-init zsh)")
   hop config init        bootstrap a starter hop.yaml
   hop config where       print the resolved hop.yaml path
+  hop update             self-update the hop binary via Homebrew
   hop -C <name> <cmd>... run <cmd>... with the working directory set to <name>'s repo dir
   hop                    fzf picker, print selection
   hop code               fzf picker, then open VSCode
@@ -67,6 +68,7 @@ func newRootCmd() *cobra.Command {
 		newLsCmd(),
 		newShellInitCmd(),
 		newConfigCmd(),
+		newUpdateCmd(),
 	)
 
 	return cmd

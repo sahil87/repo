@@ -18,7 +18,7 @@ hop() {
     return $?
   fi
   case "$1" in
-    cd|clone|where|ls|code|open|shell-init|config|--help|-h|--version|completion)
+    cd|clone|where|ls|code|open|shell-init|config|update|--help|-h|--version|completion)
       _hop_dispatch "$@"
       ;;
     -*)

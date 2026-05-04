@@ -25,6 +25,7 @@ hop/
 │   │       ├── ls.go                     # `hop ls`
 │   │       ├── shell_init.go             # `hop shell-init zsh`
 │   │       ├── config.go                 # `hop config init` and `hop config where`
+│   │       ├── update.go                 # `hop update` (delegates to `internal/update`)
 │   │       ├── *_test.go                 # adjacent unit tests per file
 │   │       ├── dashc_test.go             # extractDashC argv-split tests
 │   │       ├── integration_test.go       # builds the binary and exercises it end-to-end
@@ -60,6 +61,9 @@ hop/
 │       ├── proc/
 │       │   ├── proc.go                   # Run, RunInteractive, RunForeground, ExitCode, ErrNotFound
 │       │   └── proc_test.go
+│       ├── update/
+│       │   ├── update.go                 # Run(version) — Homebrew self-update
+│       │   └── update_test.go
 │       └── platform/
 │           ├── platform.go               # package doc only
 │           ├── open_darwin.go            # //go:build darwin

@@ -40,6 +40,19 @@ All three runner functions use `exec.CommandContext(ctx, name, args...)` — nev
 
 Why a dedicated package: the invocation is non-trivial (multiple flags, stdin piping, query prefill) and used by 5+ subcommands. Worth one file.
 
+## `internal/update` — Homebrew self-update
+
+`Run(currentVersion string) error`:
+
+- Detects whether the binary was installed via Homebrew by walking `os.Executable()` through `filepath.EvalSymlinks` and checking for `/Cellar/` in the resolved path. Non-brew installs print a manual-update hint and return nil (exit 0).
+- Refreshes the brew index (`brew update --quiet`, 30s timeout via `proc.Run`).
+- Queries the latest tap formula version (`brew info --json=v2 sahil87/tap/hop`, parses `formulae[0].versions.stable`).
+- Compares against `currentVersion` after stripping any leading `v` (binary reports `v0.0.3`, brew reports `0.0.3`).
+- On mismatch, runs `brew upgrade sahil87/tap/hop` with a 120s timeout via `proc.RunForeground` so brew's progress streams through.
+- All `brew` invocations route through `internal/proc` (Constitution Principle I).
+
+Formula name: **`sahil87/tap/hop` (fully qualified)** to dodge a name collision with the Homebrew core `hop` cask (an HWP document viewer).
+
 ## `internal/yamled` — comment-preserving YAML write-back
 
 `AppendURL(path, group, url string) error`:

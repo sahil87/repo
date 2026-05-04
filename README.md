@@ -10,6 +10,14 @@ A small Go CLI for locating, opening, and operating on git repositories listed i
 brew install sahil87/tap/hop
 ```
 
+To update later:
+
+```sh
+hop update
+```
+
+`hop update` self-upgrades via Homebrew (`brew update` then `brew upgrade sahil87/tap/hop`). When `hop` was installed from source or a release tarball, `hop update` prints a hint and exits without invoking brew.
+
 ### GitHub Release tarball
 
 Download the appropriate tar.gz for your platform from the [latest release](https://github.com/sahil87/hop/releases/latest) — assets are named `hop-{os}-{arch}.tar.gz` (where `{os}` is `darwin` or `linux` and `{arch}` is `arm64` or `amd64`). Extract and place the `hop` binary on your `$PATH`.
