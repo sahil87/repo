@@ -6,7 +6,7 @@ import (
 
 // completeRepoNames is a cobra ValidArgsFunction that returns repo names from
 // hop.yaml for shell tab-completion. Used by every subcommand whose first
-// positional is a repo name (where, cd, code, open, clone) and by the root
+// positional is a repo name (where, cd, open, clone) and by the root
 // bare-form (hop <name>). The generated shell scripts do prefix-matching
 // against toComplete on the candidate set — we just hand back every name.
 //

@@ -124,7 +124,7 @@ func TestIntegrationShellInitZsh(t *testing.T) {
 	}
 }
 
-func TestIntegrationDashC(t *testing.T) {
+func TestIntegrationDashR(t *testing.T) {
 	bin := buildBinary(t)
 	dir := t.TempDir()
 	yaml := filepath.Join(dir, "hop.yaml")
@@ -142,11 +142,11 @@ func TestIntegrationDashC(t *testing.T) {
 		t.Fatalf("setup: %v", err)
 	}
 
-	cmd := exec.Command(bin, "-C", "probe", "pwd")
+	cmd := exec.Command(bin, "-R", "probe", "pwd")
 	cmd.Env = append(os.Environ(), "HOP_CONFIG="+yaml)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("hop -C probe pwd: %v\noutput: %s", err, out)
+		t.Fatalf("hop -R probe pwd: %v\noutput: %s", err, out)
 	}
 	want := filepath.Join(dir, "probe")
 	if got := strings.TrimSpace(string(out)); got != want {
@@ -154,9 +154,9 @@ func TestIntegrationDashC(t *testing.T) {
 	}
 }
 
-func TestIntegrationDashCNoCommand(t *testing.T) {
+func TestIntegrationDashRNoCommand(t *testing.T) {
 	bin := buildBinary(t)
-	cmd := exec.Command(bin, "-C", "anything")
+	cmd := exec.Command(bin, "-R", "anything")
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected error, got nil")
@@ -166,7 +166,7 @@ func TestIntegrationDashCNoCommand(t *testing.T) {
 			t.Fatalf("expected exit 2, got %d", exitErr.ExitCode())
 		}
 	}
-	if !strings.Contains(string(out), "-C requires a command") {
+	if !strings.Contains(string(out), "-R requires a command") {
 		t.Fatalf("expected usage hint, got: %s", out)
 	}
 }

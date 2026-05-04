@@ -2,7 +2,7 @@
 
 > Part of [@sahil87's open source toolkit](https://ai.shll.in) — see all projects there.
 
-A small Go CLI for locating, opening, and operating on git repositories listed in `hop.yaml`. The dominant use case is navigation: `hop <name>` prints a path; `h <name>` (the single-letter alias) `cd`s your shell into that repo via the bare-name dispatcher; `hop -C <name> <cmd>...` runs a command inside it without changing your cwd.
+A small Go CLI for locating, opening, and operating on git repositories listed in `hop.yaml`. The dominant use case is navigation: `hop <name>` prints a path; `h <name>` (the single-letter alias) `cd`s your shell into that repo via the bare-name dispatcher; `hop <tool> <name>` (e.g. `hop cursor dotfiles`) or the explicit `hop -R <name> <cmd>...` runs a command inside the repo without changing your cwd.
 
 ## Install
 
@@ -38,13 +38,14 @@ Builds the binary and copies it to `~/.local/bin/hop`. Make sure that directory 
 
 ## Shell integration
 
-For the shell integration (bare-name `cd`, the `h` and `hi` aliases, and zsh tab completion):
+For the shell integration (bare-name `cd`, the `hop <tool> <name>` sugar, the `h` and `hi` aliases, and tab completion):
 
 ```sh
-eval "$(hop shell-init zsh)"
+eval "$(hop shell-init zsh)"   # zsh
+eval "$(hop shell-init bash)"  # bash
 ```
 
-Add that line to your `~/.zshrc`.
+Add that line to your `~/.zshrc` or `~/.bashrc`.
 
 ## First run
 
@@ -64,7 +65,9 @@ hop                       # fzf picker over all repos; prints selection's path
 hop where outbox          # resolve "outbox" to its absolute path
 hop ls                    # list every repo (name + path)
 h outbox                  # cd into outbox (single-letter alias + bare-name dispatch)
-hop -C outbox git status  # run `git status` inside outbox; cwd unchanged
+hop git outbox status     # tool-form: run `git status` inside outbox; cwd unchanged
+hop cursor dotfiles       # tool-form: open dotfiles in cursor
+hop -R outbox git status  # explicit form (works without the shim, e.g. in scripts)
 hop clone outbox          # registry-driven: clone outbox if it isn't already on disk
 hop clone git@github.com:foo/bar.git
                           # ad-hoc: clone the URL, register it in hop.yaml, cd into it

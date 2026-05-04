@@ -15,19 +15,18 @@ hop/
 │   ├── go.sum
 │   ├── cmd/
 │   │   └── hop/
-│   │       ├── main.go                   # entrypoint + translateExit + extractDashC + runDashC
+│   │       ├── main.go                   # entrypoint + translateExit + extractDashR + runDashR
 │   │       ├── root.go                   # cobra root + version handling + rootLong help text
 │   │       ├── where.go                  # `hop where`, bare `hop <name>`, shared resolver helpers
-│   │       ├── code.go                   # `hop code`
 │   │       ├── open.go                   # `hop open`
 │   │       ├── cd.go                     # `hop cd` (binary form: prints hint + exit 2)
 │   │       ├── clone.go                  # `hop clone` (single, --all, ad-hoc URL)
 │   │       ├── ls.go                     # `hop ls`
-│   │       ├── shell_init.go             # `hop shell-init zsh`
+│   │       ├── shell_init.go             # `hop shell-init <shell>` (zsh + bash, shared posixInit)
 │   │       ├── config.go                 # `hop config init` and `hop config where`
 │   │       ├── update.go                 # `hop update` (delegates to `internal/update`)
 │   │       ├── *_test.go                 # adjacent unit tests per file
-│   │       ├── dashc_test.go             # extractDashC argv-split tests
+│   │       ├── dashr_test.go             # extractDashR argv-split tests
 │   │       ├── integration_test.go       # builds the binary and exercises it end-to-end
 │   │       └── testutil_test.go          # shared test helpers
 │   └── internal/
@@ -108,19 +107,18 @@ Tests import packages as `github.com/sahil87/hop/internal/config`, etc.
 
 ### `cmd/hop`
 
-Cobra command definitions, flag parsing, exit code handling, the `-C` argv splitter.
+Cobra command definitions, flag parsing, exit code handling, the `-R` argv splitter.
 
 | File | Exports / contents |
 |---|---|
-| `main.go` | `func main()` — builds rootCmd, sets `Version`, captures `rootForCompletion`, runs `extractDashC` (pre-cobra), calls `Execute()`. Defines `translateExit` (sole stderr/exit path), `extractDashC` (argv splitter for `-C`), `runDashC` (resolve + `proc.RunForeground`), and the typed sentinels (`errSilent`, `errFzfMissing`, `errFzfCancelled`, `errExitCode`). Holds the package-level `var version = "dev"` (overridden via `-ldflags "-X main.version=…"`). |
+| `main.go` | `func main()` — builds rootCmd, sets `Version`, captures `rootForCompletion`, runs `extractDashR` (pre-cobra), calls `Execute()`. Defines `translateExit` (sole stderr/exit path), `extractDashR` (argv splitter for `-R`), `runDashR` (resolve + `proc.RunForeground`), and the typed sentinels (`errSilent`, `errFzfMissing`, `errFzfCancelled`, `errExitCode`). Holds the package-level `var version = "dev"` (overridden via `-ldflags "-X main.version=…"`). |
 | `root.go` | `func newRootCmd() *cobra.Command` — root command with `RunE` for bare-form (no subcommand or single positional). Sets `Version`, `SilenceUsage = true`, `SilenceErrors = true`. Holds `rootLong` (the help-text Usage table and Notes block) and the `AddCommand` wiring. |
 | `where.go` | `func newWhereCmd() *cobra.Command` — `hop where <name>`. Hosts shared helpers: `loadRepos()`, `resolveByName(query)`, `resolveOne(cmd, query)`, `resolveAndPrint(cmd, query)`, `buildPickerLines(rs)`. Also defines `fzfMissingHint`. |
-| `code.go` | `func newCodeCmd() *cobra.Command`. Defines `codeMissingHint`. |
 | `open.go` | `func newOpenCmd() *cobra.Command`. Calls `platform.Open` and formats the missing-tool stderr using `platform.OpenTool()`. |
 | `cd.go` | `func newCdCmd() *cobra.Command` — prints `cdHint` to stderr and returns `errExitCode{code: 2}`. |
 | `clone.go` | `func newCloneCmd() *cobra.Command` — handles three forms: `<name>`, `--all`, `<url>`. URL detection via `looksLikeURL`. Holds `cloneTimeout` (10 minutes), `gitMissingHint`. URL form delegates the YAML write to `internal/yamled.AppendURL`. |
 | `ls.go` | `func newLsCmd() *cobra.Command` — `cobra.NoArgs`. |
-| `shell_init.go` | `func newShellInitCmd() *cobra.Command`. Emits `zshInit` (a Go raw-string constant) followed by the cobra-generated `_hop` completion via `rootForCompletion.GenZshCompletion(out)`. |
+| `shell_init.go` | `func newShellInitCmd() *cobra.Command`. Emits the shared `posixInit` raw-string constant (defines `hop()`, `_hop_dispatch()`, `h()`, `hi()`; tool-form dispatch built in) followed by cobra-generated completion: `rootForCompletion.GenZshCompletion(out)` + `compdef _hop h hi` for zsh, `rootForCompletion.GenBashCompletionV2(out, true)` + `complete -o default -F __start_hop h hi` for bash. |
 | `config.go` | `func newConfigCmd() *cobra.Command` — parent for `init` and `where`; uses `cobra.Command{Use: "config"}` with `AddCommand(newConfigInitCmd(), newConfigWhereCmd())`. |
 
 ### `internal/config`
@@ -194,11 +192,11 @@ Test files MAY use `os/exec` directly — to spawn the built binary in integrati
 |---|---|
 | `func Run(ctx, name, args...) ([]byte, error)` | Non-interactive. Captures stdout to bytes; stderr passes through to parent. Used for `git`, `code`, `open`/`xdg-open`. |
 | `func RunInteractive(ctx, stdin io.Reader, name, args...) (string, error)` | Pipes stdin, captures stdout to string; stderr passes through. Used for `fzf`. |
-| `func RunForeground(ctx, dir, name, args...) (int, error)` | Runs a child with `cmd.Dir = dir` and stdin/stdout/stderr inherited. Returns the child's exit code on success (error nil); `(-1, ErrNotFound)` if the binary is missing; `(-1, err)` for other failures. Used by `hop -C`. |
+| `func RunForeground(ctx, dir, name, args...) (int, error)` | Runs a child with `cmd.Dir = dir` and stdin/stdout/stderr inherited. Returns the child's exit code on success (error nil); `(-1, ErrNotFound)` if the binary is missing; `(-1, err)` for other failures. Used by `hop -R` (and the shim's tool-form sugar). |
 | `var ErrNotFound` | Sentinel returned when the binary is not on PATH. Callers use `errors.Is(err, proc.ErrNotFound)`. |
 | `func ExitCode(err error) (int, bool)` | Helper to extract a child's exit code from `*exec.ExitError` without callers importing `os/exec`. |
 
-Default timeouts: callers MUST construct a `context.Context` with a timeout for non-interactive ops (e.g., 5s for read-only ops, 10 minutes for `git clone`). Interactive operations (fzf) and `-C` use `context.Background()` (no timeout) because the user is at the keyboard or running an arbitrary child.
+Default timeouts: callers MUST construct a `context.Context` with a timeout for non-interactive ops (e.g., 5s for read-only ops, 10 minutes for `git clone`). Interactive operations (fzf) and `-R` use `context.Background()` (no timeout) because the user is at the keyboard or running an arbitrary child.
 
 ### `internal/platform`
 
@@ -221,9 +219,8 @@ Per Constitution Principle IV ("Wrap, Don't Reinvent"):
 |---|---|
 | `git` | Inline `internal/proc.Run("git", "clone", ...)` calls in `cmd/hop/clone.go`. No dedicated `internal/git/` package — premature for two operations (`git clone` for registered names, `git clone` for ad-hoc URLs). |
 | `fzf` | `internal/fzf.Pick` — non-trivial invocation (multiple flags, stdin piping, query prefill), used by 5+ subcommands. Worth one file. |
-| `code` | Inline `internal/proc.Run("code", path)` in `cmd/hop/code.go`. |
 | `open` / `xdg-open` | `internal/platform.Open` — wrapped because the choice is platform-specific. |
-| `<cmd>` (for `-C`) | Inline `internal/proc.RunForeground(...)` in `cmd/hop/main.go::runDashC`. |
+| `<cmd>` (for `-R`) | Inline `internal/proc.RunForeground(...)` in `cmd/hop/main.go::runDashR`. The shim's tool-form sugar rewrites to `-R`, so it shares this exec path. |
 | YAML (read) | `gopkg.in/yaml.v3` directly in `internal/config/config.go`. Not re-wrapped — yaml.v3 already is the wrapper. |
 | YAML (write-back) | `internal/yamled.AppendURL` — wrapped because comment-preserving write requires node-level navigation, atomic temp+rename, and an `ErrGroupNotFound` sentinel. |
 
@@ -236,7 +233,8 @@ The entire git surface is `git clone <url> <dest>` (in single, `--all`, and ad-h
 The grouped-schema rename introduced two primitives that other operations build on:
 
 - **`hop where <name>`** — path resolver. Stdin/stdout-friendly: `cd "$(hop where outbox)"` works as a shell composition. The bare form `hop <name>` does the same thing.
-- **`hop -C <name> <cmd>...`** — exec-in-context. `git -C`-style: run a child command with cwd set to the resolved repo dir, without leaving the parent shell's cwd changed.
+- **`hop -R <name> <cmd>...`** — exec-in-context. Repo-scoped: run a child command with cwd set to the resolved repo dir, without leaving the parent shell's cwd changed. Spelled `-R` (not `-C` like `git -C` / `make -C`) because hop is **repo-scoped**, not arbitrary-directory-scoped — the resolution path goes through `resolveByName` which only resolves repos in `hop.yaml`.
+- **`hop <tool> <name> [args...]`** — shim-only tool-form sugar. Rewrites to `command hop -R <name> <tool> [args...]`. Lives in `shell_init.go::posixInit`, NOT the binary. See [cli-surface.md](cli-surface.md#hop-tool-name-shim-sugar) for the precedence ladder and collision rules.
 
 Future verbs (`sync`, `autosync`, `features`) build on these rather than each one re-implementing path resolution and exec.
 
@@ -285,5 +283,5 @@ Per Constitution Principle I ("Security First"):
 5. **`internal/proc/` is the security choke point.** Centralizing exec lets the security audit be a single grep, not a code review of every call site.
 6. **No `internal/git/` package yet.** Two operations (`git clone <name>` and `git clone <url>`) don't justify a package — both are inline `proc.Run("git", "clone", ...)`. Promote later if `fetch`/`pull`/`status` get added.
 7. **`internal/yamled` is separate from `internal/config`.** Validator and mutator have different responsibilities and different test surfaces. Keeping them separate is worth the extra package.
-8. **`-C` argv splitting in `main.go::extractDashC`, pre-cobra.** Cobra's parser would interpret the child's flags as `hop`'s flags. Pre-Execute argv inspection is a single small function, unit-tested in `dashc_test.go`. The alternative — `cobra.Command{DisableFlagParsing: true}` on a `-C` subcommand — would require `-C` to be a subcommand rather than a flag, breaking the `git -C`-style ergonomics.
+8. **`-R` argv splitting in `main.go::extractDashR`, pre-cobra.** Cobra's parser would interpret the child's flags as `hop`'s flags. Pre-Execute argv inspection is a single small function, unit-tested in `dashr_test.go`. The alternative — `cobra.Command{DisableFlagParsing: true}` on a `-R` subcommand — would require `-R` to be a subcommand rather than a flag, breaking the flag-style ergonomics. Spelled `-R` (not `-C` like `git -C` / `make -C` / `tar -C`) because hop is repo-scoped (resolves names via `hop.yaml`), not directory-scoped.
 9. **`rootForCompletion` is a package-level var.** `shell-init zsh` needs `rootCmd` to call `GenZshCompletion`, but threading `rootCmd` through every factory clutters the wiring. `main()` captures it once after `newRootCmd()`; `shell_init.go` reads it. Acceptable singleton for this binary's scale.
