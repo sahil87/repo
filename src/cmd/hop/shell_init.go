@@ -93,6 +93,13 @@ func newShellInitCmd() *cobra.Command {
 					return fmt.Errorf("hop shell-init: zsh completion: %w", err)
 				}
 			}
+			// Cobra registers the completion only for `hop`; share it with the
+			// `h` and `hi` aliases so tab completion works on those too. The
+			// `_hop` completion script handles the words[1] == "h" or "hi"
+			// case correctly because the `h` function calls the hop shell
+			// function (which routes __complete* to `command hop`), and `hi`
+			// invokes the binary directly.
+			fmt.Fprint(out, "\ncompdef _hop h hi\n")
 			return nil
 		},
 	}

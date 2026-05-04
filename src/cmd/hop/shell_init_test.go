@@ -37,6 +37,24 @@ func TestShellInitZshContainsHopFunctionAndAliases(t *testing.T) {
 	}
 }
 
+// TestShellInitZshRegistersCompletionForAliases asserts that the emitted
+// shell-init shares the cobra-generated _hop completion with the `h` and
+// `hi` aliases via `compdef _hop h hi`. Without this, tab completion only
+// works on the `hop` command — `h <prefix><TAB>` would fall through to
+// zsh's default file-name completion.
+func TestShellInitZshRegistersCompletionForAliases(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "compdef _hop h hi") {
+		t.Fatalf("expected `compdef _hop h hi` registration, got:\n%s", stdout.String())
+	}
+}
+
 // TestShellInitZshRoutesCobraCompletionToBinary asserts that the emitted hop()
 // shell function explicitly routes cobra's __complete* introspection calls
 // to `command hop` rather than the bare-name dispatcher. Without this branch,

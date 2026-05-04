@@ -100,7 +100,7 @@ The static portion (`shell_init.go::zshInit`) defines:
 - `h() { hop "$@"; }` — single-letter alias.
 - `hi() { command hop "$@"; }` — un-shadowed alias (calls the binary directly, bypassing the shim).
 
-The cobra-generated zsh completion (a `_hop` function) is appended at runtime via `rootCmd.GenZshCompletion(out)`. The `rootCmd` reference is captured in `main.go::rootForCompletion` (a package-level var set in `main()`).
+The cobra-generated zsh completion (a `_hop` function) is appended at runtime via `rootCmd.GenZshCompletion(out)`. The `rootCmd` reference is captured in `main.go::rootForCompletion` (a package-level var set in `main()`). After the cobra completion, the shell-init also emits `compdef _hop h hi` so the `h` and `hi` aliases share the same completion logic — without this, tab completion would only work on `hop`, not on the aliases.
 
 ## `hop clone` per-line output
 
