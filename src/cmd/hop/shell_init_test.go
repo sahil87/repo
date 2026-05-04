@@ -103,6 +103,10 @@ func TestShellInitContainsToolFormDispatch(t *testing.T) {
 // which errors with cobra's terse "accepts at most 1 arg(s)" — useless for
 // the user to debug. The cheerful error suggests `hop where <repo>` (path)
 // and `hop -R <repo> /full/path/to/<tool>` (binary equivalent).
+//
+// The message uses `type "$1"` to detect the kind (builtin / keyword /
+// alias / function) so an alias or function gets an accurate label rather
+// than being mislabeled as a builtin.
 func TestShellInitEmitsCheerfulBuiltinError(t *testing.T) {
 	rootForCompletion = newRootCmd()
 	defer func() { rootForCompletion = nil }()
@@ -112,8 +116,11 @@ func TestShellInitEmitsCheerfulBuiltinError(t *testing.T) {
 		t.Fatalf("shell-init zsh: %v", err)
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "is a shell builtin (not a binary)") {
-		t.Fatalf("expected cheerful builtin-error message, got:\n%s", out)
+	if !strings.Contains(out, `_hop_kind="$(type "$1" 2>&1 | head -1)"`) {
+		t.Fatalf("expected `type \"$1\"` kind detection in builtin error, got:\n%s", out)
+	}
+	if !strings.Contains(out, "not a binary, so it can't run as a tool inside a repo.") {
+		t.Fatalf("expected cheerful not-a-binary message, got:\n%s", out)
 	}
 	if !strings.Contains(out, "To get the path: hop where") {
 		t.Fatalf("expected `hop where` hint in builtin error, got:\n%s", out)
@@ -144,6 +151,11 @@ func TestShellInitEmitsCheerfulMissingBinaryError(t *testing.T) {
 // TestShellInitZshDoesNotListCodeAsSubcommand asserts the case-statement no
 // longer treats `code` as a known subcommand (the binary's `hop code` was
 // removed in favor of the tool-form `hop code <repo>`).
+//
+// The test is structured in two phases so that a missing-or-renamed case-list
+// line cannot make the test silently no-op (which the original loop-only
+// version did): phase 1 finds the line; phase 2 asserts `code` is absent.
+// If the case-list line is ever renamed, removed, or re-shaped, phase 1 fails.
 func TestShellInitZshDoesNotListCodeAsSubcommand(t *testing.T) {
 	rootForCompletion = newRootCmd()
 	defer func() { rootForCompletion = nil }()
@@ -153,14 +165,57 @@ func TestShellInitZshDoesNotListCodeAsSubcommand(t *testing.T) {
 		t.Fatalf("shell-init zsh: %v", err)
 	}
 	out := stdout.String()
-	// Look for the case-statement line that lists known subcommands.
+
+	// Phase 1: locate the subcommand case-list line. The shim emits the line
+	// `<sub>|<sub>|...|completion)` followed on the next line by
+	// `_hop_dispatch "$@"`. We anchor on the trailing `|completion)` form
+	// which uniquely identifies the case-list line — robust to subcommand
+	// list reordering and indentation changes.
+	var caseListLine string
 	for _, line := range strings.Split(out, "\n") {
-		if strings.Contains(line, "shell-init") && strings.Contains(line, "_hop_dispatch") {
-			// This is the subcommand case line — must not contain `|code|` anymore.
-			if strings.Contains(line, "|code|") || strings.HasPrefix(strings.TrimSpace(line), "code|") {
-				t.Fatalf("expected `code` to be removed from subcommand case-list, got line:\n%s", line)
-			}
+		if strings.Contains(line, "|completion)") && strings.Contains(line, "shell-init") {
+			caseListLine = line
+			break
 		}
+	}
+	if caseListLine == "" {
+		t.Fatalf("could not find subcommand case-list line (anchor: `|completion)` + `shell-init` on one line). The shim format may have changed; update this test. Output:\n%s", out)
+	}
+
+	// Phase 2: assert `code` is absent from the located line.
+	if strings.Contains(caseListLine, "|code|") || strings.HasPrefix(strings.TrimSpace(caseListLine), "code|") {
+		t.Fatalf("expected `code` to be removed from subcommand case-list, got line:\n%s", caseListLine)
+	}
+}
+
+// TestShellInitZshListsHelpAsSubcommand asserts the case-list includes `help`
+// so that `hop help` and `hop help <subcommand>` reach cobra's auto-generated
+// help command. Without this, the shim would treat `hop help` as a bare-name
+// `cd` (1 arg) or hit the tool-form/cheerful-error path (`hop help open`,
+// 2 args). Same two-phase structure as TestShellInitZshDoesNotListCodeAsSubcommand.
+func TestShellInitZshListsHelpAsSubcommand(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+
+	var caseListLine string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "|completion)") && strings.Contains(line, "shell-init") {
+			caseListLine = line
+			break
+		}
+	}
+	if caseListLine == "" {
+		t.Fatalf("could not find subcommand case-list line. Output:\n%s", out)
+	}
+
+	if !strings.Contains(caseListLine, "|help|") {
+		t.Fatalf("expected `help` in the subcommand case-list (so `hop help` reaches cobra), got line:\n%s", caseListLine)
 	}
 }
 

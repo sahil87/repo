@@ -170,3 +170,50 @@ func TestIntegrationDashRNoCommand(t *testing.T) {
 		t.Fatalf("expected usage hint, got: %s", out)
 	}
 }
+
+// TestIntegrationShellInitBashSourceable spawns a real bash, evals the
+// shim script emitted by `hop shell-init bash`, and exercises one dispatch
+// path (bare-name resolution via `command hop where`). This catches syntax,
+// quoting, and completion-registration regressions that string-level
+// assertions in shell_init_test.go would miss. Skipped if bash isn't
+// available.
+func TestIntegrationShellInitBashSourceable(t *testing.T) {
+	bashPath, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skipf("bash not on PATH: %v", err)
+	}
+
+	bin := buildBinary(t)
+	dir := t.TempDir()
+	yaml := filepath.Join(dir, "hop.yaml")
+	body := `repos:
+  default:
+    dir: ` + dir + `
+    urls:
+      - git@github.com:sahil87/probe.git
+`
+	if err := os.WriteFile(yaml, []byte(body), 0o644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	// Eval the shim, then call hop where (a known-subcommand path), and
+	// verify the function-wrapped call resolves correctly. Use --noprofile
+	// --norc to isolate from the user's bashrc and PATH-prepend the dir
+	// containing the freshly-built binary so `command hop` resolves to it.
+	binDir := filepath.Dir(bin)
+	script := `eval "$(hop shell-init bash)" 2>/dev/null
+hop where probe`
+	cmd := exec.Command(bashPath, "--noprofile", "--norc", "-c", script)
+	cmd.Env = append(os.Environ(),
+		"HOP_CONFIG="+yaml,
+		"PATH="+binDir+":"+os.Getenv("PATH"),
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("bash -c '<shim>; hop where probe': %v\noutput: %s", err, out)
+	}
+	want := filepath.Join(dir, "probe")
+	if got := strings.TrimSpace(string(out)); got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
