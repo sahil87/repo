@@ -1,0 +1,6 @@
+repos:
+  vendor:
+    dir: ~/vendor
+    sync_strategy: aggressive
+    urls:
+      - git@github.com:foo/bar.git

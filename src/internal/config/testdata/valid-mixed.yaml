@@ -1,0 +1,16 @@
+config:
+  code_root: ~/code
+
+repos:
+  default:
+    - git@github.com:sahil87/hop.git
+
+  vendor:
+    dir: ~/vendor
+    urls:
+      - git@github.com:some-vendor/their-tool.git
+
+  experiments:
+    dir: experiments
+    urls:
+      - git@github.com:sahil87/sandbox.git

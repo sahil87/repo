@@ -1,82 +1,127 @@
 package repos
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/sahil87/repo/internal/config"
 )
 
-func TestFromConfig(t *testing.T) {
+func TestFromConfigFlatGroup(t *testing.T) {
 	t.Setenv("HOME", "/home/test")
-	cfg := &config.Config{Entries: map[string][]string{
-		"~/code/sahil87": {
-			"git@github.com:sahil87/repo.git",
-			"git@github.com:sahil87/wt.git",
+	cfg := &config.Config{
+		CodeRoot: "~/code",
+		Groups: []config.Group{
+			{
+				Name: "default",
+				URLs: []string{
+					"git@github.com:sahil87/hop.git",
+					"git@github.com:sahil87/wt.git",
+				},
+			},
 		},
-		"/etc/foo": {
-			"https://github.com/example/foo.git",
-		},
-	}}
+	}
 	rs, err := FromConfig(cfg)
 	if err != nil {
 		t.Fatalf("FromConfig: %v", err)
 	}
-	if len(rs) != 3 {
-		t.Fatalf("expected 3 repos, got %d", len(rs))
+	if len(rs) != 2 {
+		t.Fatalf("expected 2 repos, got %d", len(rs))
 	}
 
-	// Check that path joins are correct and ~ was expanded
-	for _, r := range rs {
-		switch r.Name {
-		case "repo":
-			if r.Dir != "/home/test/code/sahil87" {
-				t.Fatalf("repo: expected ~/code/sahil87 expanded, got %q", r.Dir)
-			}
-			if r.Path != "/home/test/code/sahil87/repo" {
-				t.Fatalf("repo: expected expanded path, got %q", r.Path)
-			}
-		case "wt":
-			if r.Path != "/home/test/code/sahil87/wt" {
-				t.Fatalf("wt: expected expanded path, got %q", r.Path)
-			}
-		case "foo":
-			if r.Dir != "/etc/foo" {
-				t.Fatalf("foo: expected literal /etc/foo, got %q", r.Dir)
-			}
-			if r.Path != filepath.Join("/etc/foo", "foo") {
-				t.Fatalf("foo: expected /etc/foo/foo, got %q", r.Path)
-			}
-		default:
-			t.Fatalf("unexpected repo name %q", r.Name)
+	if rs[0].Name != "hop" {
+		t.Errorf("rs[0].Name = %q, want hop", rs[0].Name)
+	}
+	if rs[0].Group != "default" {
+		t.Errorf("rs[0].Group = %q, want default", rs[0].Group)
+	}
+	if rs[0].Path != "/home/test/code/sahil87/hop" {
+		t.Errorf("rs[0].Path = %q", rs[0].Path)
+	}
+	if rs[1].Path != "/home/test/code/sahil87/wt" {
+		t.Errorf("rs[1].Path = %q", rs[1].Path)
+	}
+}
+
+func TestFromConfigMapGroupAbsoluteDir(t *testing.T) {
+	t.Setenv("HOME", "/home/test")
+	cfg := &config.Config{
+		CodeRoot: "~/code",
+		Groups: []config.Group{
+			{
+				Name: "vendor",
+				Dir:  "~/vendor",
+				URLs: []string{"git@github.com:vendor/their-tool.git"},
+			},
+		},
+	}
+	rs, _ := FromConfig(cfg)
+	if len(rs) != 1 {
+		t.Fatalf("expected 1 repo, got %d", len(rs))
+	}
+	if rs[0].Path != "/home/test/vendor/their-tool" {
+		t.Errorf("Path = %q", rs[0].Path)
+	}
+	if rs[0].Group != "vendor" {
+		t.Errorf("Group = %q", rs[0].Group)
+	}
+}
+
+func TestFromConfigMapGroupRelativeDir(t *testing.T) {
+	t.Setenv("HOME", "/home/test")
+	cfg := &config.Config{
+		CodeRoot: "~/code",
+		Groups: []config.Group{
+			{
+				Name: "experiments",
+				Dir:  "experiments",
+				URLs: []string{"git@github.com:sahil87/sandbox.git"},
+			},
+		},
+	}
+	rs, _ := FromConfig(cfg)
+	if len(rs) != 1 {
+		t.Fatalf("expected 1 repo, got %d", len(rs))
+	}
+	if rs[0].Path != "/home/test/code/experiments/sandbox" {
+		t.Errorf("Path = %q (relative dir should resolve relative to code_root)", rs[0].Path)
+	}
+}
+
+func TestFromConfigGroupOrderPreserved(t *testing.T) {
+	cfg := &config.Config{
+		CodeRoot: "/r",
+		Groups: []config.Group{
+			{Name: "experiments", Dir: "/x", URLs: []string{"git@h:/c.git"}},
+			{Name: "default", URLs: []string{"git@h:o/a.git"}},
+			{Name: "vendor", Dir: "/v", URLs: []string{"git@h:/b.git"}},
+		},
+	}
+	rs, _ := FromConfig(cfg)
+	if len(rs) != 3 {
+		t.Fatalf("expected 3, got %d", len(rs))
+	}
+	wantOrder := []string{"experiments", "default", "vendor"}
+	for i, w := range wantOrder {
+		if rs[i].Group != w {
+			t.Errorf("rs[%d].Group = %q, want %q", i, rs[i].Group, w)
 		}
 	}
 }
 
-func TestFromConfigDeterministicOrder(t *testing.T) {
-	cfg := &config.Config{Entries: map[string][]string{
-		"/zzz": {"git@example.com:z/c.git", "git@example.com:z/a.git", "git@example.com:z/b.git"},
-		"/aaa": {"git@example.com:a/y.git", "git@example.com:a/x.git"},
-		"/mmm": {"git@example.com:m/m.git"},
-	}}
-	first, _ := FromConfig(cfg)
-	for i := 0; i < 25; i++ {
-		got, _ := FromConfig(cfg)
-		if len(got) != len(first) {
-			t.Fatalf("iteration %d: length mismatch", i)
-		}
-		for j := range got {
-			if got[j] != first[j] {
-				t.Fatalf("iteration %d index %d: %+v != %+v", i, j, got[j], first[j])
-			}
-		}
+func TestFromConfigDefaultCodeRoot(t *testing.T) {
+	t.Setenv("HOME", "/home/test")
+	cfg := &config.Config{
+		CodeRoot: "~",
+		Groups: []config.Group{
+			{Name: "default", URLs: []string{"git@github.com:foo/bar.git"}},
+		},
 	}
-	if first[0].Dir != "/aaa" || first[len(first)-1].Dir != "/zzz" {
-		t.Fatalf("expected dir-sorted output, got first=%q last=%q", first[0].Dir, first[len(first)-1].Dir)
+	rs, _ := FromConfig(cfg)
+	if len(rs) != 1 {
+		t.Fatal("expected 1 repo")
 	}
-	// Within /aaa, URLs should sort alphabetically: a/x.git before a/y.git → names x before y
-	if first[0].Name != "x" || first[1].Name != "y" {
-		t.Fatalf("expected url-sorted within dir (x then y), got %q then %q", first[0].Name, first[1].Name)
+	if rs[0].Path != "/home/test/foo/bar" {
+		t.Errorf("Path = %q", rs[0].Path)
 	}
 }
 
@@ -84,30 +129,52 @@ func TestDeriveName(t *testing.T) {
 	tests := []struct {
 		url, want string
 	}{
-		{"git@github.com:sahil87/repo.git", "repo"},
+		{"git@github.com:sahil87/hop.git", "hop"},
 		{"https://github.com/wvrdz/loom.git", "loom"},
 		{"git@gitlab.com:org/group/sub/proj.git", "proj"},
 		{"https://example.com/no-git-suffix", "no-git-suffix"},
 	}
 	for _, tt := range tests {
-		if got := deriveName(tt.url); got != tt.want {
-			t.Errorf("deriveName(%q) = %q, want %q", tt.url, got, tt.want)
+		if got := DeriveName(tt.url); got != tt.want {
+			t.Errorf("DeriveName(%q) = %q, want %q", tt.url, got, tt.want)
 		}
 	}
 }
 
-func TestExpandTilde(t *testing.T) {
-	t.Setenv("HOME", "/home/test")
-	cases := map[string]string{
-		"~/code":      "/home/test/code",
-		"~":           "/home/test",
-		"/abs/path":   "/abs/path",
-		"/etc/~weird": "/etc/~weird",
-		"relative":    "relative",
+func TestDeriveOrg(t *testing.T) {
+	tests := []struct {
+		url, want string
+	}{
+		{"git@github.com:sahil87/hop.git", "sahil87"},
+		{"https://github.com/sahil87/hop.git", "sahil87"},
+		{"git@gitlab.com:org/group/sub/proj.git", "org/group/sub"},
+		{"https://github.com/sahil87/hop", "sahil87"},
+		{"file:///tmp/local-repo.git", "tmp"},
+		{"plain-name", ""},
 	}
-	for in, want := range cases {
-		if got := expandTilde(in); got != want {
-			t.Errorf("expandTilde(%q) = %q, want %q", in, got, want)
+	for _, tt := range tests {
+		if got := DeriveOrg(tt.url); got != tt.want {
+			t.Errorf("DeriveOrg(%q) = %q, want %q", tt.url, got, tt.want)
+		}
+	}
+}
+
+func TestExpandDir(t *testing.T) {
+	t.Setenv("HOME", "/home/test")
+	cases := []struct {
+		dir, hint, want string
+	}{
+		{"~", "", "/home/test"},
+		{"~/code", "", "/home/test/code"},
+		{"/abs/path", "", "/abs/path"},
+		{"experiments", "~/code", "/home/test/code/experiments"},
+		{"experiments", "/srv/code", "/srv/code/experiments"},
+		{"~user/foo", "", "~user/foo"},
+		{"", "", ""},
+	}
+	for _, c := range cases {
+		if got := ExpandDir(c.dir, c.hint); got != c.want {
+			t.Errorf("ExpandDir(%q, %q) = %q, want %q", c.dir, c.hint, got, c.want)
 		}
 	}
 }
@@ -121,7 +188,7 @@ func TestMatchOne(t *testing.T) {
 
 	caseInsensitive := rs.MatchOne("REPO")
 	if len(caseInsensitive) != 2 {
-		t.Fatalf("expected 2 matches for case-insensitive 'REPO', got %d", len(caseInsensitive))
+		t.Fatalf("expected 2 matches for 'REPO', got %d", len(caseInsensitive))
 	}
 
 	all := rs.MatchOne("")

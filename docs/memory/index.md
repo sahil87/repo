@@ -5,7 +5,7 @@
 
 | Domain | Description | Memory Files |
 |--------|-------------|------|
-| cli | Command-line surface — subcommands and the match-resolution algorithm | [subcommands](cli/subcommands.md), [match-resolution](cli/match-resolution.md) |
-| config | repos.yaml search order, schema, and bootstrap | [search-order](config/search-order.md), [yaml-schema](config/yaml-schema.md), [init-bootstrap](config/init-bootstrap.md) |
-| architecture | Source tree layout and wrapper boundaries | [package-layout](architecture/package-layout.md), [wrapper-boundaries](architecture/wrapper-boundaries.md) |
+| cli | Command-line surface — subcommands, ad-hoc URL clone, match resolution, shell shim | [subcommands](cli/subcommands.md), [match-resolution](cli/match-resolution.md) |
+| config | hop.yaml search order, grouped schema, and bootstrap | [search-order](config/search-order.md), [yaml-schema](config/yaml-schema.md), [init-bootstrap](config/init-bootstrap.md) |
+| architecture | Source tree layout, cobra wiring, `-C` argv inspection, wrapper boundaries | [package-layout](architecture/package-layout.md), [wrapper-boundaries](architecture/wrapper-boundaries.md) |
 | build | Local build pipeline (justfile + scripts) and tag-driven release pipeline (GitHub Actions + homebrew-tap) | [local](build/local.md), [release-pipeline](build/release-pipeline.md) |

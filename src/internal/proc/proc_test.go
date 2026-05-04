@@ -54,3 +54,47 @@ func TestRunContextCancel(t *testing.T) {
 		t.Fatalf("expected error from context cancellation, got nil")
 	}
 }
+
+func TestRunForegroundFalse(t *testing.T) {
+	ctx := context.Background()
+	code, err := RunForeground(ctx, "/", "false")
+	if err != nil {
+		t.Fatalf("RunForeground false: %v", err)
+	}
+	if code != 1 {
+		t.Fatalf("expected exit 1 from false, got %d", code)
+	}
+}
+
+func TestRunForegroundTrue(t *testing.T) {
+	ctx := context.Background()
+	code, err := RunForeground(ctx, "/", "true")
+	if err != nil {
+		t.Fatalf("RunForeground true: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+}
+
+func TestRunForegroundNotFound(t *testing.T) {
+	ctx := context.Background()
+	code, err := RunForeground(ctx, "/", "this-binary-does-not-exist-xyz123")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+	if code != -1 {
+		t.Fatalf("expected code -1 on missing binary, got %d", code)
+	}
+}
+
+func TestRunForegroundDirMissing(t *testing.T) {
+	ctx := context.Background()
+	code, err := RunForeground(ctx, "/no/such/dir", "true")
+	if err == nil {
+		t.Fatalf("expected error for missing dir, got nil")
+	}
+	if code != -1 {
+		t.Fatalf("expected code -1, got %d", code)
+	}
+}

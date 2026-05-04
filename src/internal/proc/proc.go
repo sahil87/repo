@@ -1,4 +1,4 @@
-// Package proc is the centralized subprocess-execution wrapper for the repo binary.
+// Package proc is the centralized subprocess-execution wrapper for the hop binary.
 // All external-tool invocations (git, fzf, code, open, xdg-open) MUST go through this
 // package — Constitution Principle I (Security First) requires this. No package outside
 // internal/proc may import os/exec directly.
@@ -53,6 +53,34 @@ func ExitCode(err error) (int, bool) {
 		return exitErr.ExitCode(), true
 	}
 	return 0, false
+}
+
+// RunForeground invokes name+args with Dir set to dir and stdin/stdout/stderr
+// inherited from the parent. The exit code of the subprocess is returned via
+// the (code, error) pair: when the subprocess runs to completion, code is its
+// exit code and error is nil. When exec fails before the subprocess starts
+// (binary not found, dir does not exist, or other I/O error), code is -1 and
+// error is non-nil. Use errors.Is(err, ErrNotFound) to detect missing binary.
+//
+// Used by `hop -C <name> <cmd>...` to delegate to a child command in a
+// resolved repo's directory.
+func RunForeground(ctx context.Context, dir, name string, args ...string) (int, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return -1, ErrNotFound
+		}
+		if code, ok := ExitCode(err); ok {
+			// Child ran and exited non-zero. Propagate the code without an error.
+			return code, nil
+		}
+		return -1, err
+	}
+	return 0, nil
 }
 
 // RunInteractive invokes name with args using exec.CommandContext and pipes stdin from

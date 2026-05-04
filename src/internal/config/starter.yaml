@@ -1,11 +1,21 @@
-# Repositories to clone, grouped by parent directory.
-# Each key is a directory (~ is expanded). Values are git clone URLs.
-#
-# Edit this file to add your own repos. Tip: set $REPOS_YAML in your shell rc
-# to point at a version-tracked location (a git-tracked dotfile, Dropbox, etc.)
+# hop config — locator and operations registry.
+# Edit to add repos. Tip: set $HOP_CONFIG to a tracked path (dotfiles, Dropbox)
 # so this config moves with you across machines.
 #
-# Example below: clones the `repo` tool itself. Replace or extend.
+# Two ways to add a repo:
+#   1. Append a URL to a flat group (default) — convention applies:
+#      path = <config.code_root>/<org-from-url>/<name-from-url>
+#   2. Use a named group with explicit `dir:` to override convention.
 
-~/code/sahil87:
-  - git@github.com:sahil87/repo.git
+config:
+  code_root: ~/code
+
+repos:
+  default:
+    - git@github.com:sahil87/hop.git    # the locator tool itself
+
+  # Example: vendor group with explicit dir override.
+  # vendor:
+  #   dir: ~/vendor
+  #   urls:
+  #     - git@github.com:some-vendor/their-tool.git

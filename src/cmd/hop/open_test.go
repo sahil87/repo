@@ -10,7 +10,7 @@ func TestOpenMissingTool(t *testing.T) {
 	writeReposFixture(t, singleRepoYAML)
 	t.Setenv("PATH", "/nonexistent")
 
-	_, stderr, err := runArgs(t, "open", "repo")
+	_, stderr, err := runArgs(t, "open", "hop")
 	if err == nil {
 		t.Fatalf("expected error when open/xdg-open is missing")
 	}
@@ -18,8 +18,8 @@ func TestOpenMissingTool(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		tool = "open"
 	}
-	want := "repo open: '" + tool + "' not found."
+	want := "hop open: '" + tool + "' not found."
 	if !strings.Contains(stderr.String(), want) {
-		t.Fatalf("expected stderr to contain %q (single-quoted tool name per cli-surface.md §External Tool Availability), got %q", want, stderr.String())
+		t.Fatalf("expected stderr to contain %q, got %q", want, stderr.String())
 	}
 }

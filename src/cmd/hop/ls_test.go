@@ -5,9 +5,12 @@ import (
 	"testing"
 )
 
-const lsYAML = `/tmp/test-ls:
-  - git@github.com:sahil87/alpha.git
-  - git@github.com:sahil87/beta.git
+const lsYAML = `repos:
+  default:
+    dir: /tmp/test-ls
+    urls:
+      - git@github.com:sahil87/alpha.git
+      - git@github.com:sahil87/beta.git
 `
 
 func TestLsListsAllRepos(t *testing.T) {

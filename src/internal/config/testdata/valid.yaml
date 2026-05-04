@@ -1,6 +1,10 @@
-~/code/sahil87:
-  - git@github.com:sahil87/repo.git
-  - git@github.com:sahil87/wt.git
+config:
+  code_root: ~/code
 
-~/code/wvrdz:
-  - https://github.com/wvrdz/loom.git
+repos:
+  default:
+    - git@github.com:sahil87/hop.git
+    - git@github.com:sahil87/wt.git
+
+  external:
+    - https://github.com/wvrdz/loom.git
