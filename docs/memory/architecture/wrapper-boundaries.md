@@ -22,11 +22,11 @@ Test files (`*_test.go`) MAY use `os/exec` directly — to spawn the built binar
 |---|---|
 | `Run(ctx, name, args...) ([]byte, error)` | Non-interactive. Captures stdout to bytes; stderr passes through to parent. |
 | `RunInteractive(ctx, stdin io.Reader, name, args...) (string, error)` | Pipes stdin, captures stdout to string; stderr passes through. Used for fzf. |
-| `RunForeground(ctx, dir, name, args...) (int, error)` | Runs a child with `cmd.Dir = dir` and stdin/stdout/stderr **inherited** from the parent. Returns the child's exit code on success (error nil); returns `(-1, ErrNotFound)` if the binary is missing; returns `(-1, err)` for other I/O / exec failures. Used by `hop -C`. |
+| `RunForeground(ctx, dir, name, args...) (int, error)` | Runs a child with `cmd.Dir = dir` and stdin/stdout/stderr **inherited** from the parent. Returns the child's exit code on success (error nil); returns `(-1, ErrNotFound)` if the binary is missing; returns `(-1, err)` for other I/O / exec failures. Used by `hop -R` (and the shim's tool-form, which rewrites to `-R`). |
 | `var ErrNotFound` | Sentinel returned when the binary is not on PATH. Callers use `errors.Is(err, proc.ErrNotFound)` to produce install-hint messages. |
 | `ExitCode(err) (int, bool)` | Helper to extract the child's exit code from an `*exec.ExitError` without callers needing to import `os/exec`. |
 
-All three runner functions use `exec.CommandContext(ctx, name, args...)` — never `exec.Command`, never shell strings. Callers supply the `context.Context` (with timeout for non-interactive ops; `context.Background()` for fzf and `-C` since the user is at the keyboard / running an arbitrary child).
+All three runner functions use `exec.CommandContext(ctx, name, args...)` — never `exec.Command`, never shell strings. Callers supply the `context.Context` (with timeout for non-interactive ops; `context.Background()` for fzf and `-R` since the user is at the keyboard / running an arbitrary child).
 
 ## `internal/fzf` — fzf wrapper
 
@@ -87,22 +87,21 @@ Per Constitution Principle IV ("Wrap, Don't Reinvent") — wrap external tools, 
 | External call | Where | Why no wrapper package |
 |---|---|---|
 | `git clone` | `cmd/hop/clone.go` calls `proc.Run(ctx, "git", "clone", url, path)` inline | Single operation; a 5-line `internal/git/` package is premature abstraction. Promote later if `git fetch` / `git pull` / `git status` get added. |
-| `code` | `cmd/hop/code.go` calls `proc.Run(ctx, "code", path)` inline | Single operation. |
 | YAML parsing | `internal/config/config.go` calls `yaml.Unmarshal` directly into `*yaml.Node` | `gopkg.in/yaml.v3` already is the wrapper. |
-| `-C` child exec | `cmd/hop/main.go::runDashC` calls `proc.RunForeground` | Wrapping is `internal/proc`'s job; the binary just composes. |
+| `-R` child exec | `cmd/hop/main.go::runDashR` calls `proc.RunForeground` | Wrapping is `internal/proc`'s job; the binary just composes. |
 
 ## Composability primitives
 
 The change introduced two primitives that other operations build on:
 
 - **`hop where <name>`** — path resolver. Stdin/stdout-friendly: `cd "$(hop where outbox)"` works as a shell composition.
-- **`hop -C <name> <cmd>...`** — exec-in-context. `git -C`-style: run a child command with cwd set to the resolved repo dir, without leaving the parent shell's cwd changed.
+- **`hop -R <name> <cmd>...`** — exec-in-context. Repo-scoped: run a child command with cwd set to the resolved repo dir, without leaving the parent shell's cwd changed. The shim's `hop <tool> <name>` sugar rewrites to this.
 
 Future verbs (`sync`, `autosync`, `features`) build on these rather than each one re-implementing path resolution and exec.
 
 ## Security guarantees
 
 1. **`exec.CommandContext` everywhere** — kernel never sees a shell string; argv is an explicit slice.
-2. **User input passes as args, not shell tokens** — repo names from `hop.yaml` reach `git clone` via `proc.Run("git", "clone", url, path)`; fzf queries reach fzf as `--query <q>` (a single arg) and the candidate list is on stdin; `-C`'s child argv is forwarded as a slice to `proc.RunForeground`.
+2. **User input passes as args, not shell tokens** — repo names from `hop.yaml` reach `git clone` via `proc.Run("git", "clone", url, path)`; fzf queries reach fzf as `--query <q>` (a single arg) and the candidate list is on stdin; `-R`'s child argv is forwarded as a slice to `proc.RunForeground`.
 3. **No `sh -c`, no `bash -c`, no command-string interpolation anywhere in production code.**
 4. **Atomic file writes** — `internal/yamled` uses temp file + rename in the same directory, preserving the original on rename failure.

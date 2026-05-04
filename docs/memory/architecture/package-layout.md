@@ -9,15 +9,15 @@ src/
 ├── go.mod                        # module github.com/sahil87/hop, go 1.22
 ├── go.sum
 ├── cmd/hop/                      # one cobra entrypoint (renamed from cmd/repo/)
-│   ├── main.go                   # entrypoint + translateExit + extractDashC + runDashC
+│   ├── main.go                   # entrypoint + translateExit + extractDashR + runDashR
 │   ├── root.go                   # newRootCmd, rootLong help text, AddCommand wiring
 │   ├── where.go                  # newWhereCmd + shared loadRepos/resolveOne/resolveByName/buildPickerLines (was path.go)
-│   ├── code.go, open.go, cd.go   # one file per subcommand
+│   ├── open.go, cd.go            # one file per subcommand
 │   ├── clone.go, ls.go
-│   ├── shell_init.go             # zshInit static prefix + cobra GenZshCompletion at runtime
+│   ├── shell_init.go             # posixInit (shared zsh+bash) + cobra GenZshCompletion / GenBashCompletionV2 at runtime
 │   ├── config.go                 # config + nested init/where subcommands
 │   ├── *_test.go                 # adjacent unit tests
-│   ├── dashc_test.go             # extractDashC unit tests
+│   ├── dashr_test.go             # extractDashR unit tests
 │   ├── integration_test.go       # builds the binary and exercises it end-to-end
 │   └── testutil_test.go          # shared test helpers
 └── internal/
@@ -64,19 +64,19 @@ src/
 
 ## Cobra wiring
 
-Each subcommand is exposed via a `func newXxxCmd() *cobra.Command` factory in its own file. `root.go::newRootCmd()` constructs the root and calls `AddCommand(newWhereCmd(), newCodeCmd(), …)`. `main.go::main()`:
+Each subcommand is exposed via a `func newXxxCmd() *cobra.Command` factory in its own file. `root.go::newRootCmd()` constructs the root and calls `AddCommand(newWhereCmd(), newOpenCmd(), …)`. `main.go::main()`:
 
 1. Builds `rootCmd := newRootCmd()`.
 2. Sets `rootCmd.Version = version` (the package-level `var version = "dev"`, overridden via `-ldflags "-X main.version=…"` at build time — see [build/local](../build/local.md)).
-3. Sets `rootForCompletion = rootCmd` (a package-level var used by `shell-init zsh` to call `GenZshCompletion` without threading rootCmd through the factory).
-4. Inspects `os.Args` for `-C` via `extractDashC`; if present, resolves the target via `resolveByName` and execs the child via `proc.RunForeground` with `os.Exit(code)` — bypassing cobra entirely.
+3. Sets `rootForCompletion = rootCmd` (a package-level var used by `shell-init` to call `GenZshCompletion` / `GenBashCompletionV2` without threading rootCmd through the factory).
+4. Inspects `os.Args` for `-R` via `extractDashR`; if present, resolves the target via `resolveByName` and execs the child via `proc.RunForeground` with `os.Exit(code)` — bypassing cobra entirely.
 5. Otherwise calls `rootCmd.Execute()`. Errors are mapped to exit codes via `translateExit`.
 
 `rootCmd` sets `SilenceUsage = true` and `SilenceErrors = true` so we control all stderr/exit emission via `translateExit`. Bare-form (`hop` or `hop <name>`) is implemented by `RunE` checking `len(args)` and dispatching to the same `resolveAndPrint` helper used by `hop where`.
 
-### Why pre-Execute argv inspection for `-C`
+### Why pre-Execute argv inspection for `-R`
 
-Cobra's flag parser would try to dispatch `<cmd>...` after `-C <name>` as a subcommand (or its args), which fails for arbitrary child commands like `hop -C name git status`. Pre-Execute inspection of `os.Args` lets us split argv into the hop portion (just `-C <name>`) and the child portion (the rest), then run the child directly via `proc.RunForeground`. The split is a single function (`extractDashC`), unit-tested in `dashc_test.go`.
+Cobra's flag parser would try to dispatch `<cmd>...` after `-R <name>` as a subcommand (or its args), which fails for arbitrary child commands like `hop -R name git status`. Pre-Execute inspection of `os.Args` lets us split argv into the hop portion (just `-R <name>`) and the child portion (the rest), then run the child directly via `proc.RunForeground`. The split is a single function (`extractDashR`), unit-tested in `dashr_test.go`.
 
 ## `internal/yamled`
 

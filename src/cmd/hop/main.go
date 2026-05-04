@@ -26,15 +26,15 @@ func main() {
 	rootCmd.Version = version
 	rootForCompletion = rootCmd
 
-	// -C must be handled before cobra parses argv: the post-<name> argv is a
+	// -R must be handled before cobra parses argv: the post-<name> argv is a
 	// child command line, not a hop subcommand. We split os.Args into the hop
 	// portion and the child portion before delegating.
-	if target, child, ok, err := extractDashC(os.Args); ok {
+	if target, child, ok, err := extractDashR(os.Args); ok {
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(2)
 		}
-		os.Exit(runDashC(target, child))
+		os.Exit(runDashR(target, child))
 	}
 
 	if err := rootCmd.Execute(); err != nil {
@@ -42,40 +42,40 @@ func main() {
 	}
 }
 
-// extractDashC scans args (typically os.Args, including args[0] = binary name)
-// for a `-C` global flag. It returns target (the value), child (everything
-// after the target), ok (whether -C was found), and err (set when -C is
+// extractDashR scans args (typically os.Args, including args[0] = binary name)
+// for a `-R` global flag. It returns target (the value), child (everything
+// after the target), ok (whether -R was found), and err (set when -R is
 // present but malformed: missing value or missing child command).
 //
 // Accepted forms:
 //
-//	hop -C <name> <cmd>...
-//	hop -C=<name> <cmd>...
+//	hop -R <name> <cmd>...
+//	hop -R=<name> <cmd>...
 //
-// args before -C are ignored — -C is treated as a top-level flag with no
+// args before -R are ignored — -R is treated as a top-level flag with no
 // other hop-side flags currently coexisting.
-func extractDashC(args []string) (target string, child []string, ok bool, err error) {
+func extractDashR(args []string) (target string, child []string, ok bool, err error) {
 	for i := 1; i < len(args); i++ {
 		a := args[i]
-		if a == "-C" {
+		if a == "-R" {
 			if i+1 >= len(args) {
-				return "", nil, true, fmt.Errorf("hop: -C requires a value. Usage: hop -C <name> <cmd>...")
+				return "", nil, true, fmt.Errorf("hop: -R requires a value. Usage: hop -R <name> <cmd>...")
 			}
 			target = args[i+1]
 			rest := args[i+2:]
 			if len(rest) == 0 {
-				return target, nil, true, fmt.Errorf("hop: -C requires a command to execute. Usage: hop -C <name> <cmd>...")
+				return target, nil, true, fmt.Errorf("hop: -R requires a command to execute. Usage: hop -R <name> <cmd>...")
 			}
 			return target, rest, true, nil
 		}
-		if len(a) > 3 && a[:3] == "-C=" {
+		if len(a) > 3 && a[:3] == "-R=" {
 			target = a[3:]
 			if target == "" {
-				return "", nil, true, fmt.Errorf("hop: -C requires a value. Usage: hop -C <name> <cmd>...")
+				return "", nil, true, fmt.Errorf("hop: -R requires a value. Usage: hop -R <name> <cmd>...")
 			}
 			rest := args[i+1:]
 			if len(rest) == 0 {
-				return target, nil, true, fmt.Errorf("hop: -C requires a command to execute. Usage: hop -C <name> <cmd>...")
+				return target, nil, true, fmt.Errorf("hop: -R requires a command to execute. Usage: hop -R <name> <cmd>...")
 			}
 			return target, rest, true, nil
 		}
@@ -83,10 +83,10 @@ func extractDashC(args []string) (target string, child []string, ok bool, err er
 	return "", nil, false, nil
 }
 
-// runDashC resolves target to a repo directory and execs child[0] with
+// runDashR resolves target to a repo directory and execs child[0] with
 // child[1:] as argv there. Stdin/stdout/stderr are inherited. The child's
 // exit code becomes hop's exit code.
-func runDashC(target string, child []string) int {
+func runDashR(target string, child []string) int {
 	repo, err := resolveByName(target)
 	if err != nil {
 		if errors.Is(err, errFzfMissing) {
@@ -103,10 +103,10 @@ func runDashC(target string, child []string) int {
 	code, err := proc.RunForeground(context.Background(), repo.Path, child[0], child[1:]...)
 	if err != nil {
 		if errors.Is(err, proc.ErrNotFound) {
-			fmt.Fprintf(os.Stderr, "hop: -C: '%s' not found.\n", child[0])
+			fmt.Fprintf(os.Stderr, "hop: -R: '%s' not found.\n", child[0])
 			return 1
 		}
-		fmt.Fprintf(os.Stderr, "hop: -C: %v\n", err)
+		fmt.Fprintf(os.Stderr, "hop: -R: %v\n", err)
 		return 1
 	}
 	return code

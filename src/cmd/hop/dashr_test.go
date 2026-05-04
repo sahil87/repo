@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func TestExtractDashCFound(t *testing.T) {
-	target, child, ok, err := extractDashC([]string{"hop", "-C", "outbox", "echo", "hi"})
+func TestExtractDashRFound(t *testing.T) {
+	target, child, ok, err := extractDashR([]string{"hop", "-R", "outbox", "echo", "hi"})
 	if !ok {
 		t.Fatalf("expected ok=true")
 	}
@@ -21,8 +21,8 @@ func TestExtractDashCFound(t *testing.T) {
 	}
 }
 
-func TestExtractDashCEqualsForm(t *testing.T) {
-	target, child, ok, err := extractDashC([]string{"hop", "-C=outbox", "echo"})
+func TestExtractDashREqualsForm(t *testing.T) {
+	target, child, ok, err := extractDashR([]string{"hop", "-R=outbox", "echo"})
 	if !ok || err != nil {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
@@ -34,8 +34,8 @@ func TestExtractDashCEqualsForm(t *testing.T) {
 	}
 }
 
-func TestExtractDashCNoCommand(t *testing.T) {
-	_, _, ok, err := extractDashC([]string{"hop", "-C", "outbox"})
+func TestExtractDashRNoCommand(t *testing.T) {
+	_, _, ok, err := extractDashR([]string{"hop", "-R", "outbox"})
 	if !ok {
 		t.Fatalf("expected ok=true (flag was found)")
 	}
@@ -47,8 +47,8 @@ func TestExtractDashCNoCommand(t *testing.T) {
 	}
 }
 
-func TestExtractDashCNoValue(t *testing.T) {
-	_, _, ok, err := extractDashC([]string{"hop", "-C"})
+func TestExtractDashRNoValue(t *testing.T) {
+	_, _, ok, err := extractDashR([]string{"hop", "-R"})
 	if !ok || err == nil {
 		t.Fatalf("expected ok=true and err for missing value")
 	}
@@ -57,9 +57,9 @@ func TestExtractDashCNoValue(t *testing.T) {
 	}
 }
 
-func TestExtractDashCAbsent(t *testing.T) {
-	_, _, ok, _ := extractDashC([]string{"hop", "ls"})
+func TestExtractDashRAbsent(t *testing.T) {
+	_, _, ok, _ := extractDashR([]string{"hop", "ls"})
 	if ok {
-		t.Fatalf("expected ok=false when -C absent")
+		t.Fatalf("expected ok=false when -R absent")
 	}
 }
