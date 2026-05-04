@@ -42,7 +42,11 @@ func Resolve() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("hop: no hop.yaml found. Set $HOP_CONFIG to a tracked file (e.g., a Dropbox path or a git-tracked dotfile), or run 'hop config init' to bootstrap one at $XDG_CONFIG_HOME/hop/hop.yaml.")
+	bootstrap, werr := ResolveWriteTarget()
+	if werr != nil {
+		bootstrap = "$XDG_CONFIG_HOME/hop/hop.yaml"
+	}
+	return "", fmt.Errorf("hop: no hop.yaml found. Set $HOP_CONFIG to a tracked file (e.g., a Dropbox path or a git-tracked dotfile), or run 'hop config init' to bootstrap one at %s.", bootstrap)
 }
 
 // ResolveWriteTarget returns the path that would be used as the config target

@@ -23,9 +23,9 @@ The first candidate that resolves wins. There is no caching — re-resolved on e
   ```
   Setting an env var is intent; falling through would mask config bugs.
 - Candidates 2 and 3: each `os.Stat` checked. Missing → fall to next candidate (no error).
-- All three exhausted → return:
+- All three exhausted → return (the bootstrap path is resolved to an absolute path via `ResolveWriteTarget` — `$XDG_CONFIG_HOME/hop/hop.yaml` if set, else `$HOME/.config/hop/hop.yaml`):
   ```
-  hop: no hop.yaml found. Set $HOP_CONFIG to a tracked file (e.g., a Dropbox path or a git-tracked dotfile), or run 'hop config init' to bootstrap one at $XDG_CONFIG_HOME/hop/hop.yaml.
+  hop: no hop.yaml found. Set $HOP_CONFIG to a tracked file (e.g., a Dropbox path or a git-tracked dotfile), or run 'hop config init' to bootstrap one at /Users/you/.config/hop/hop.yaml.
   ```
 - Sentinel `ErrNoConfig` is exported but the actual returned errors use `fmt.Errorf` with the exact messages above (callers don't currently `errors.Is` the sentinel).
 

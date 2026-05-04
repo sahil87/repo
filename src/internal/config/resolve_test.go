@@ -105,7 +105,22 @@ func TestResolveAllUnset(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
-	want := "hop: no hop.yaml found. Set $HOP_CONFIG to a tracked file (e.g., a Dropbox path or a git-tracked dotfile), or run 'hop config init' to bootstrap one at $XDG_CONFIG_HOME/hop/hop.yaml."
+	want := "hop: no hop.yaml found. Set $HOP_CONFIG to a tracked file (e.g., a Dropbox path or a git-tracked dotfile), or run 'hop config init' to bootstrap one at /this/dir/does/not/exist-xyz/.config/hop/hop.yaml."
+	if err.Error() != want {
+		t.Fatalf("error mismatch:\n  want: %s\n  got:  %s", want, err.Error())
+	}
+}
+
+func TestResolveAllUnsetXDGSet(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("XDG_CONFIG_HOME", "/custom/xdg")
+	t.Setenv("HOME", "/this/dir/does/not/exist-xyz")
+
+	_, err := Resolve()
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	want := "hop: no hop.yaml found. Set $HOP_CONFIG to a tracked file (e.g., a Dropbox path or a git-tracked dotfile), or run 'hop config init' to bootstrap one at /custom/xdg/hop/hop.yaml."
 	if err.Error() != want {
 		t.Fatalf("error mismatch:\n  want: %s\n  got:  %s", want, err.Error())
 	}
