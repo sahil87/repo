@@ -11,6 +11,7 @@ func newCdCmd() *cobra.Command {
 		Use:   "cd <name>",
 		Short: "cd into the resolved repo (shell-only — needs `eval \"$(hop shell-init zsh)\"`)",
 		// Accept any args (or none); the binary form just prints the hint.
+		ValidArgsFunction: completeRepoNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return &errExitCode{code: 2, msg: cdHint}
 		},
