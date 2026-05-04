@@ -6,6 +6,12 @@ import (
 
 const rootLong = `hop — locate, open, and operate on repos from hop.yaml.
 
+Getting started:
+  1. Run ` + "`hop config init`" + ` to create a starter hop.yaml.
+  2. Edit it to list your repos (each entry: name + git URL + parent dir).
+  3. Optional: set $HOP_CONFIG in your shell rc to point at a tracked file
+     (git-tracked dotfile, Dropbox, etc.) so it follows you across machines.
+
 Usage:
   hop <name>             echo abs path of matching repo
   hop where <name>       same, explicit form
@@ -31,8 +37,7 @@ Notes:
   - ` + "`hop cd`" + ` requires the shell integration (a binary can't change its parent shell's cwd).
     Without it, use:  cd "$(hop where <name>)"
   - On ambiguous or no-match queries, fzf opens prefilled with your query.
-  - Config: $HOP_CONFIG, then $XDG_CONFIG_HOME/hop/hop.yaml, then $HOME/.config/hop/hop.yaml.
-    Run ` + "`hop config init`" + ` to bootstrap one.`
+  - Config search order: $HOP_CONFIG, then $XDG_CONFIG_HOME/hop/hop.yaml, then $HOME/.config/hop/hop.yaml.`
 
 func newRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
