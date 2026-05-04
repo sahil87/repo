@@ -1,0 +1,8 @@
+{"action":"enter","driver":"fab-new","event":"stage-transition","stage":"intake","ts":"2026-05-04T10:58:27Z"}
+{"args":"tab completion for repo names in $2 of two-arg forms (-R and tool-form)","cmd":"fab-new","event":"command","ts":"2026-05-04T10:58:27Z"}
+{"delta":"+1.8","event":"confidence","score":1.8,"trigger":"calc-score","ts":"2026-05-04T11:07:17Z"}
+{"delta":"+0.0","event":"confidence","score":1.8,"trigger":"calc-score","ts":"2026-05-04T11:07:29Z"}
+{"delta":"+0.0","event":"confidence","score":1.8,"trigger":"calc-score","ts":"2026-05-04T11:07:44Z"}
+{"delta":"+0.0","event":"confidence","score":1.8,"trigger":"calc-score","ts":"2026-05-04T11:07:52Z"}
+{"delta":"+0.7","event":"confidence","score":2.5,"trigger":"calc-score","ts":"2026-05-04T11:08:06Z"}
+{"delta":"+0.0","event":"confidence","score":2.5,"trigger":"calc-score","ts":"2026-05-04T11:08:10Z"}
