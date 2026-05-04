@@ -24,11 +24,11 @@ func TestNormalizeVersion(t *testing.T) {
 }
 
 // TestRunNonBrewInstall confirms that when the running binary is NOT installed
-// via Homebrew, Run prints a manual-update hint and returns nil without
-// invoking brew. We cannot easily simulate "brew install" inside the test
-// process, but we CAN observe that go's `go test` binary doesn't live under
-// /Cellar/, so isBrewInstalled returns false here — making this assertion
-// stable in CI and on developer machines.
+// via Homebrew, Run prints a manual-update hint to its `out` writer and
+// returns nil without invoking brew. We cannot easily simulate "brew install"
+// inside the test process, but we CAN observe that go's `go test` binary
+// doesn't live under /Cellar/, so isBrewInstalled returns false here — making
+// this assertion stable in CI and on developer machines.
 func TestRunNonBrewInstall(t *testing.T) {
 	if isBrewInstalled() {
 		t.Skip("test binary appears to be brew-installed; non-brew code path not exercised")

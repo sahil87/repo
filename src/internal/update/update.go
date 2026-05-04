@@ -33,13 +33,23 @@ const (
 
 // Run self-updates the hop binary via Homebrew.
 //
-// currentVersion is the binary's reported version (e.g. "v0.0.3" — the leading
-// "v" is stripped before comparison). out and errOut receive user-facing
-// stdout and stderr respectively; pass os.Stdout / os.Stderr from the caller.
+// currentVersion is the binary's reported version (e.g. "v0.0.3"). The leading
+// "v" is stripped before comparison since `brew info` reports the bare form.
 //
-// Returns nil on success or no-op (e.g. not a brew install, already up to
-// date). Returns a non-nil error when a brew step fails — callers map this to
-// exit code 1 via the standard cobra error path.
+// out and errOut receive only the WRAPPER messages this package emits ("Current
+// version:", "Already up to date", error hints, etc.). Subprocess stdout/stderr
+// from `brew update`, `brew info`, and `brew upgrade` is intentionally NOT
+// routed through these writers — internal/proc owns subprocess stream routing
+// (proc.Run pipes child stderr to the parent's os.Stderr; proc.RunForeground
+// inherits all three streams). The split is deliberate: subprocess streams
+// are large and tty-aware (brew prints colored progress); the wrapper messages
+// are small and may be redirected for tests or embedding. Callers in production
+// should pass os.Stdout / os.Stderr to keep the two consistent.
+//
+// Returns nil on success or no-op (not a brew install, already up to date).
+// Returns proc.ErrNotFound when brew is missing on PATH (callers should map
+// this to errSilent so cobra does not double-print). Returns a wrapped error
+// for other brew failures.
 func Run(currentVersion string, out, errOut io.Writer) error {
 	if !isBrewInstalled() {
 		fmt.Fprintf(out, "hop %s was not installed via Homebrew.\n", currentVersion)
@@ -51,18 +61,22 @@ func Run(currentVersion string, out, errOut io.Writer) error {
 	fmt.Fprintln(out, "Checking for updates...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), brewUpdateTimeout)
-	if _, err := proc.Run(ctx, "brew", "update", "--quiet"); err != nil {
-		cancel()
+	_, err := proc.Run(ctx, "brew", "update", "--quiet")
+	cancel()
+	if err != nil {
 		if errors.Is(err, proc.ErrNotFound) {
 			fmt.Fprintln(errOut, "hop update: brew not found on PATH.")
 			return err
 		}
 		return fmt.Errorf("brew update failed: %w", err)
 	}
-	cancel()
 
 	latest, err := brewLatestVersion()
 	if err != nil {
+		if errors.Is(err, proc.ErrNotFound) {
+			fmt.Fprintln(errOut, "hop update: brew not found on PATH.")
+			return err
+		}
 		return fmt.Errorf("could not determine latest version: %w", err)
 	}
 

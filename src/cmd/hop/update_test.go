@@ -10,6 +10,10 @@ import (
 // that `go test` binaries do not live under /Cellar/, so the function
 // short-circuits to the "not installed via Homebrew" branch — exercising the
 // cobra plumbing without hitting brew.
+//
+// runArgs captures cmd.OutOrStdout() via SetOut, and update.Run writes its
+// wrapper messages to the writer the cobra wrapper passes in (cmd.OutOrStdout()),
+// so the captured buffer reflects the user-visible output.
 func TestUpdateCobraWiring(t *testing.T) {
 	stdout, _, err := runArgs(t, "update")
 	if err != nil {

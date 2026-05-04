@@ -80,7 +80,7 @@ Lazy: only checked when the tool is actually invoked. Exact stderr lines:
 | `open`/`xdg-open` | `open.go` (formatted) | `hop open: '<tool>' not found.` (`<tool>` from `platform.OpenTool()`) |
 | `brew` | `internal/update` | `hop update: brew not found on PATH.` (only when binary is brew-installed) |
 
-All five trigger `errSilent` (exit 1) after writing to `cmd.ErrOrStderr()`.
+The first four (fzf, git, code, open/xdg-open) trigger `errSilent` (exit 1) directly — the subcommand writes the hint to `cmd.ErrOrStderr()` and returns `errSilent`. `brew` follows a slightly different path: `internal/update.Run` writes the hint and returns `proc.ErrNotFound`; the cobra wrapper in `cmd/hop/update.go` then catches `proc.ErrNotFound` via `errors.Is` and converts it to `errSilent`. The user-visible behavior is identical (single hint line on stderr, exit 1) — the indirection exists so `internal/update` stays free of cobra-specific sentinels.
 
 ## `hop cd` binary-form text
 
@@ -123,4 +123,4 @@ Implementation in `internal/update`; the cobra factory in `cmd/hop/update.go` is
 4. **Compare versions**: normalize both sides by stripping a leading `v` (binary reports `v0.0.3`, brew reports `0.0.3`). If equal, print `Already up to date (v<X>).` and exit 0.
 5. **Upgrade**: `brew upgrade sahil87/tap/hop` with a 120-second timeout. Stream brew's stdout/stderr through to the user via `proc.RunForeground` so progress is visible. On success, print `Updated to v<new>.` and exit 0.
 
-All `brew` invocations route through `internal/proc` (Constitution Principle I — no direct `os/exec` outside `internal/proc`). The package exposes `Run(currentVersion string) error` as its single public entry point.
+All `brew` invocations route through `internal/proc` (Constitution Principle I — no direct `os/exec` outside `internal/proc`). The package exposes `Run(currentVersion string, out, errOut io.Writer) error` as its single public entry point. The `out`/`errOut` writers receive only the wrapper messages this package emits; subprocess output from `brew` is routed by `internal/proc` to the parent's `os.Stdout`/`os.Stderr` directly. Production callers pass `os.Stdout` and `os.Stderr` (via `cmd.OutOrStdout()` / `cmd.ErrOrStderr()`) to keep both consistent. When `brew` is missing on PATH, `Run` returns `proc.ErrNotFound`; the cobra wrapper converts that to `errSilent` so `translateExit` doesn't print a second error line.
