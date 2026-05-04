@@ -94,7 +94,8 @@ hop: 'cd' is shell-only. Add 'eval "$(hop shell-init zsh)"' to your zshrc, or us
 
 The static portion (`shell_init.go::zshInit`) defines:
 
-- `hop()` function with bare-name dispatch — known subcommands (`cd|clone|where|ls|code|open|shell-init|config|update|--help|-h|--version|completion`) route through `_hop_dispatch`; flag-prefixed args pass through to `command hop`; everything else is treated as `cd <name>` (the bare-name dispatch).
+- `hop()` function with bare-name dispatch — cobra-internal completion entrypoints (`__complete*`) are routed straight to `command hop` so tab-completion isn't intercepted; known subcommands (`cd|clone|where|ls|code|open|shell-init|config|update|--help|-h|--version|completion`) route through `_hop_dispatch`; flag-prefixed args pass through to `command hop`; everything else is treated as `cd <name>` (the bare-name dispatch).
+  - Without the `__complete*` branch, cobra's generated `_hop` completion (which evaluates `hop __complete <args>...` to fetch dynamic candidates) would fall through to the default case and be treated as a repo named `__complete` — breaking tab completion for any non-empty prefix.
 - `_hop_dispatch()` helper — handles the shell-mutating `cd` path (`command hop where "$2"` then `cd --`), and the URL-detected `clone` path (`cd --` to the printed path on success).
 - `h() { hop "$@"; }` — single-letter alias.
 - `hi() { command hop "$@"; }` — un-shadowed alias (calls the binary directly, bypassing the shim).
