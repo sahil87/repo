@@ -1,0 +1,23 @@
+{"action":"enter","driver":"fab-new","event":"stage-transition","stage":"intake","ts":"2026-05-03T19:33:20Z"}
+{"args":"Rename repo binary to hop, restructure config schema to grouped form, add ad-hoc URL clone with auto-registration, and lay foundation for future sync/autosync features.","cmd":"fab-new","event":"command","ts":"2026-05-03T19:33:20Z"}
+{"delta":"+0.0","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-03T19:36:42Z"}
+{"delta":"+0.0","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-03T19:36:53Z"}
+{"delta":"+0.0","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-03T19:37:13Z"}
+{"delta":"+0.0","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-03T19:37:16Z"}
+{"delta":"+0.0","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-03T19:39:06Z"}
+{"delta":"+0.0","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-03T19:39:10Z"}
+{"delta":"+0.0","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-03T19:39:13Z"}
+{"delta":"+0.5","event":"confidence","score":0.5,"trigger":"calc-score","ts":"2026-05-03T19:39:27Z"}
+{"delta":"+0.3","event":"confidence","score":0.8,"trigger":"calc-score","ts":"2026-05-03T19:39:32Z"}
+{"delta":"+1.2","event":"confidence","score":2,"trigger":"calc-score","ts":"2026-05-03T19:39:41Z"}
+{"delta":"+0.3","event":"confidence","score":2.3,"trigger":"calc-score","ts":"2026-05-03T19:39:47Z"}
+{"delta":"+0.0","event":"confidence","score":2.3,"trigger":"calc-score","ts":"2026-05-03T19:39:51Z"}
+{"delta":"+0.0","event":"confidence","score":2.3,"trigger":"calc-score","ts":"2026-05-03T19:39:54Z"}
+{"delta":"+0.0","event":"confidence","score":2.3,"trigger":"calc-score","ts":"2026-05-03T19:43:32Z"}
+{"delta":"+0.6","event":"confidence","score":2.9,"trigger":"calc-score","ts":"2026-05-03T19:43:38Z"}
+{"delta":"+0.3","event":"confidence","score":3.2,"trigger":"calc-score","ts":"2026-05-03T19:43:44Z"}
+{"delta":"+0.0","event":"confidence","score":3.2,"trigger":"calc-score","ts":"2026-05-03T19:43:54Z"}
+{"delta":"+0.0","event":"confidence","score":3.2,"trigger":"calc-score","ts":"2026-05-03T19:43:59Z"}
+{"delta":"+0.0","event":"confidence","score":3.2,"trigger":"calc-score","ts":"2026-05-03T19:44:07Z"}
+{"delta":"+0.0","event":"confidence","score":3.2,"trigger":"calc-score","ts":"2026-05-03T19:44:11Z"}
+{"delta":"+0.0","event":"confidence","score":3.2,"trigger":"calc-score","ts":"2026-05-03T19:44:14Z"}
