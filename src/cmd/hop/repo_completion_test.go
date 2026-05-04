@@ -90,12 +90,82 @@ func TestCompletionMissingConfigIsSilent(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("HOP_CONFIG", "/this/does/not/exist.yaml")
 
-	// A missing config must NOT surface an error during completion — it must
-	// just return no candidates. Tab-completion errors are user-hostile.
-	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "")
+	// A missing config must NOT surface an error during completion AND must
+	// not leak any positional candidates — tab-completion errors are
+	// user-hostile and stray candidates would confuse autocompletion.
+	// Use a subcommand (`where`) so there is no subcommand-list output to
+	// confound the candidate-count assertion.
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "where", "")
 	if err != nil {
 		t.Fatalf("__complete with missing config returned error: %v", err)
 	}
-	// No assertion on output content — we only assert no error.
-	_ = stdout
+	if got := candidatesFrom(stdout.String()); len(got) > 0 {
+		t.Fatalf("expected no candidates for missing config, got: %v", got)
+	}
+}
+
+// candidatesFrom parses cobra's __complete stdout and returns the bare
+// (non-subcommand) candidate names — lines with no tab character. Cobra
+// emits subcommand entries as "name\t<short>"; ValidArgsFunction candidates
+// (our repo names) are emitted bare with no description, so a tab-free line
+// is the signal of a positional candidate. The trailing `:<int>` directive
+// line and human-readable summary are stripped.
+func candidatesFrom(out string) []string {
+	var candidates []string
+	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		if line == "" || strings.HasPrefix(line, ":") || strings.HasPrefix(line, "Completion ended") {
+			continue
+		}
+		if strings.Contains(line, "\t") {
+			continue
+		}
+		candidates = append(candidates, line)
+	}
+	return candidates
+}
+
+func TestCompletionRootFiltersSubcommandCollisions(t *testing.T) {
+	// A repo named after a subcommand can never reach the bare-form resolver
+	// — cobra dispatches the first token to the subcommand. Advertising it
+	// from the root would be misleading.
+	writeReposFixture(t, `repos:
+  default:
+    dir: /tmp/test-collision
+    urls:
+      - git@github.com:sahil87/alpha.git
+      - git@github.com:sahil87/clone.git
+      - git@github.com:sahil87/where.git
+`)
+
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "")
+	if err != nil {
+		t.Fatalf("__complete: %v", err)
+	}
+	bare := candidatesFrom(stdout.String())
+	var foundAlpha bool
+	for _, c := range bare {
+		if c == "alpha" {
+			foundAlpha = true
+		}
+		if c == "clone" || c == "where" {
+			t.Fatalf("expected colliding name %q to be filtered from root completion candidates, got: %v", c, bare)
+		}
+	}
+	if !foundAlpha {
+		t.Fatalf("expected non-colliding 'alpha' in candidates, got: %v", bare)
+	}
+}
+
+func TestCompletionCloneSuppressesOnAllFlag(t *testing.T) {
+	writeReposFixture(t, completionYAML)
+
+	// `clone --all` ignores any positional argument, so completion should
+	// not advertise repo names once --all is set.
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "clone", "--all", "")
+	if err != nil {
+		t.Fatalf("__complete clone --all: %v", err)
+	}
+	if got := candidatesFrom(stdout.String()); len(got) > 0 {
+		t.Fatalf("expected no candidates after --all, got: %v", got)
+	}
 }
