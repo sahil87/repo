@@ -45,7 +45,7 @@ hop() {
       # __complete through the bare-name dispatcher and treat it as a repo name.
       command hop "$@"
       ;;
-    cd|clone|where|ls|open|shell-init|config|update|--help|-h|--version|completion)
+    cd|clone|where|ls|open|shell-init|config|update|help|--help|-h|--version|completion)
       _hop_dispatch "$@"
       ;;
     -*)
@@ -69,9 +69,20 @@ hop() {
           command hop -R "$2" "$1" "${@:3}"
         elif [[ "$2" != -* ]] && [[ -n "$_hop_tool_path" ]]; then
           # $1 has a command -v entry but no leading slash — it's a shell
-          # builtin, keyword, alias, or function. Tool-form would silently
-          # invoke a different thing (or fail) so we stop and explain.
-          printf "hop: '%s' is a shell builtin (not a binary), so it can't run as a tool inside a repo.\n" "$1" >&2
+          # builtin, keyword, alias, or function (not a binary on PATH).
+          # Tool-form would silently invoke a different thing (or fail) so
+          # we stop and explain. Use the shell type builtin to label what
+          # kind of name it actually is — shells word it slightly
+          # differently (zsh: "shell builtin"/"reserved word"/"alias for"/
+          # "shell function"; bash: "shell builtin"/"shell keyword"/
+          # "function") but the first line of type output is descriptive
+          # enough either way.
+          local _hop_kind
+          _hop_kind="$(type "$1" 2>&1 | head -1)"
+          if [[ -z "$_hop_kind" ]]; then
+            _hop_kind="$1 is a shell name (alias, function, builtin, or keyword)"
+          fi
+          printf "hop: %s — not a binary, so it can't run as a tool inside a repo.\n" "$_hop_kind" >&2
           printf "  - To get the path: hop where %s\n" "$2" >&2
           printf "  - To run a binary by that name: hop -R %s /full/path/to/%s\n" "$2" "$1" >&2
           return 1

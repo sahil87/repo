@@ -154,7 +154,7 @@ Resolution order in the shim's `hop()` function (precedence ladder):
 1. No args → bare picker (`command hop`).
 2. `$1` is a flag (`-R`, `-h`, `-v`, ...) → `command hop "$@"`.
 3. `$1` is `__complete*` → `command hop "$@"` (cobra's hidden completion entrypoint).
-4. `$1` is a known subcommand (`cd`, `clone`, `where`, `ls`, `open`, `shell-init`, `config`, `update`, `--help`, `-h`, `--version`, `completion`) → `_hop_dispatch "$@"`. **Subcommand wins over tool**: a binary on PATH named the same as a subcommand can never be reached as tool-form through the shim — the user must spell it as `hop -R <repo> <tool>`.
+4. `$1` is a known subcommand (`cd`, `clone`, `where`, `ls`, `open`, `shell-init`, `config`, `update`, `help`, `--help`, `-h`, `--version`, `completion`) → `_hop_dispatch "$@"`. **Subcommand wins over tool**: a binary on PATH named the same as a subcommand can never be reached as tool-form through the shim — the user must spell it as `hop -R <repo> <tool>`. (`help` covers cobra's auto-generated `hop help [subcommand]` form; without it the shim would treat `hop help` as a bare-name `cd` into a repo named "help", or — for `hop help open` — hit the tool-form path.)
 5. `$1` is the only argument → `_hop_dispatch cd "$1"` (bare-name → `cd`). **Repo wins over tool** for the 1-arg form: even if `$1` is also a binary on PATH, the shim treats it as a repo name. With 2+ args there is no competing repo interpretation, so tool-form fires.
 6. `$1` is on PATH (absolute) AND `$2` is non-flag → tool-form: `command hop -R "$2" "$1" "${@:3}"`.
 7. `$1` is a builtin/keyword/alias/function (non-empty `command -v` but no leading slash) AND `$2` is non-flag → cheerful stderr error suggesting `hop where <repo>` and `hop -R <repo> /full/path/to/<tool>`; exit 1.
@@ -163,7 +163,7 @@ Resolution order in the shim's `hop()` function (precedence ladder):
 
 Steps 7 and 8 exist purely for UX: without them, the calls would fall through to the binary which errors with cobra's terse "accepts at most 1 arg(s)" — useless for the user to debug. The cheerful errors are emitted by the shim, NOT the binary. Direct binary invocations (`/path/to/hop pwd dotfiles`) still hit cobra's terse error.
 
-The PATH check uses `command -v "$1"` and tests that the result begins with `/`. Builtins, keywords, aliases, and shell functions return bare names (e.g. `pwd`, `if`, `cd`) and fail this check — so `hop pwd dotfiles` does NOT fire tool-form (`pwd` is a builtin) and falls through to step 7 where the binary errors. Users wanting to invoke `/bin/pwd` as a tool can spell the absolute path: `hop /bin/pwd dotfiles`.
+The PATH check uses `command -v "$1"` and tests that the result begins with `/`. Builtins, keywords, aliases, and shell functions return bare names (e.g. `pwd`, `if`, `cd`) and fail this check — so `hop pwd dotfiles` does NOT fire tool-form (`pwd` is a builtin); it lands in step 7, where the **shim** (not the binary) emits a cheerful stderr error and exits 1. The binary is never invoked. Users wanting to invoke `/bin/pwd` as a tool can spell the absolute path: `hop /bin/pwd dotfiles`.
 
 > **GIVEN** `cursor` is on PATH and `dotfiles` resolves uniquely
 > **WHEN** I run `hop cursor dotfiles` under the shim

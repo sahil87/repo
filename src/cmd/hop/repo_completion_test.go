@@ -156,6 +156,38 @@ func TestCompletionRootFiltersSubcommandCollisions(t *testing.T) {
 	}
 }
 
+// TestCompletionRootSurfacesRepoNamedCode asserts that since the `hop code`
+// subcommand was removed (replaced by the shim's tool-form `hop code <repo>`),
+// a repo named `code` is no longer filtered from root completion. Before
+// removal, `code` would have been suppressed by completeRepoNames' subcommand
+// collision filter; this test guards against accidental re-introduction of
+// `code` as a subcommand or hard-coded filter entry.
+func TestCompletionRootSurfacesRepoNamedCode(t *testing.T) {
+	writeReposFixture(t, `repos:
+  default:
+    dir: /tmp/test-code-uncollided
+    urls:
+      - git@github.com:sahil87/alpha.git
+      - git@github.com:sahil87/code.git
+`)
+
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "")
+	if err != nil {
+		t.Fatalf("__complete: %v", err)
+	}
+	bare := candidatesFrom(stdout.String())
+	var foundCode bool
+	for _, c := range bare {
+		if c == "code" {
+			foundCode = true
+			break
+		}
+	}
+	if !foundCode {
+		t.Fatalf("expected 'code' in root completion candidates after subcommand removal, got: %v", bare)
+	}
+}
+
 func TestCompletionCloneSuppressesOnAllFlag(t *testing.T) {
 	writeReposFixture(t, completionYAML)
 

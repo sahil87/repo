@@ -101,7 +101,7 @@ The shared `posixInit` defines:
 - `hop()` function with this resolution ladder (top-down, first match wins):
   1. **No args** → `command hop` (bare picker).
   2. **`__complete*`** → `command hop "$@"`. Cobra's hidden completion entrypoint must reach the binary; without this branch the function would route `__complete` to the bare-name dispatcher and break tab completion.
-  3. **Known subcommand** (`cd|clone|where|ls|open|shell-init|config|update|--help|-h|--version|completion`) → `_hop_dispatch "$@"`. **Subcommand wins over tool**: a binary named the same as a subcommand can't be reached as tool-form through the shim — user must spell `hop -R <repo> <tool>`.
+  3. **Known subcommand** (`cd|clone|where|ls|open|shell-init|config|update|help|--help|-h|--version|completion`) → `_hop_dispatch "$@"`. **Subcommand wins over tool**: a binary named the same as a subcommand can't be reached as tool-form through the shim — user must spell `hop -R <repo> <tool>`. The `help` token is in this list because cobra auto-wires `hop help [subcommand]`; without it the shim would route `hop help` to bare-name `cd` (1 arg) or to the tool-form/cheerful-error path (`hop help open`, 2 args).
   4. **Flag-prefixed (`-*`)** → `command hop "$@"`.
   5. **Single arg, default case** → `_hop_dispatch cd "$1"` (bare-name → `cd`). **Repo wins over tool** for the 1-arg form: a token that's both a repo and a binary on PATH dispatches as repo.
   6. **2+ args, $1 is on PATH (leading-slash check on `command -v $1`), $2 not a flag** → `command hop -R "$2" "$1" "${@:3}"` (tool-form). The leading-slash check filters builtins/keywords/aliases/functions, which return bare names from `command -v`.
