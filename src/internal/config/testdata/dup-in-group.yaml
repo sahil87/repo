@@ -1,0 +1,4 @@
+repos:
+  default:
+    - git@github.com:foo/bar.git
+    - git@github.com:foo/bar.git

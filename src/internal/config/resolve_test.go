@@ -7,28 +7,27 @@ import (
 	"testing"
 )
 
-// clearConfigEnv unsets the three env vars that drive Resolve so each test starts clean.
+// clearConfigEnv unsets the env vars that drive Resolve so each test starts clean.
 func clearConfigEnv(t *testing.T) {
 	t.Helper()
+	t.Setenv("HOP_CONFIG", "")
 	t.Setenv("REPOS_YAML", "")
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", "")
-	// Clear empty-string vs unset distinction by using os.Unsetenv directly,
-	// since t.Setenv does not provide an unset; setting to "" emulates unset for
-	// our LookupEnv/Getenv usage.
+	os.Unsetenv("HOP_CONFIG")
 	os.Unsetenv("REPOS_YAML")
 	os.Unsetenv("XDG_CONFIG_HOME")
 	os.Unsetenv("HOME")
 }
 
-func TestResolveReposYamlSet(t *testing.T) {
+func TestResolveHopConfigSet(t *testing.T) {
 	clearConfigEnv(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "custom.yaml")
 	if err := os.WriteFile(path, []byte(""), 0o644); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
-	t.Setenv("REPOS_YAML", path)
+	t.Setenv("HOP_CONFIG", path)
 
 	got, err := Resolve()
 	if err != nil {
@@ -39,10 +38,10 @@ func TestResolveReposYamlSet(t *testing.T) {
 	}
 }
 
-func TestResolveReposYamlMissing(t *testing.T) {
+func TestResolveHopConfigMissing(t *testing.T) {
 	clearConfigEnv(t)
 	missing := "/nonexistent/path-xyz.yaml"
-	t.Setenv("REPOS_YAML", missing)
+	t.Setenv("HOP_CONFIG", missing)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", "/tmp")
 
@@ -50,7 +49,7 @@ func TestResolveReposYamlMissing(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
-	want := "repo: $REPOS_YAML points to /nonexistent/path-xyz.yaml, which does not exist. Set $REPOS_YAML to an existing file or unset it."
+	want := "hop: $HOP_CONFIG points to /nonexistent/path-xyz.yaml, which does not exist. Set $HOP_CONFIG to an existing file or unset it."
 	if err.Error() != want {
 		t.Fatalf("error mismatch:\n  want: %s\n  got:  %s", want, err.Error())
 	}
@@ -59,7 +58,7 @@ func TestResolveReposYamlMissing(t *testing.T) {
 func TestResolveXDGConfig(t *testing.T) {
 	clearConfigEnv(t)
 	dir := t.TempDir()
-	path := filepath.Join(dir, "repo", "repos.yaml")
+	path := filepath.Join(dir, "hop", "hop.yaml")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -80,7 +79,7 @@ func TestResolveXDGConfig(t *testing.T) {
 func TestResolveHomeFallback(t *testing.T) {
 	clearConfigEnv(t)
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".config", "repo", "repos.yaml")
+	path := filepath.Join(dir, ".config", "hop", "hop.yaml")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -106,16 +105,37 @@ func TestResolveAllUnset(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
-	want := "repo: no repos.yaml found. Set $REPOS_YAML to a tracked file (e.g., a Dropbox path or a git-tracked dotfile), or run 'repo config init' to bootstrap one at $XDG_CONFIG_HOME/repo/repos.yaml."
+	want := "hop: no hop.yaml found. Set $HOP_CONFIG to a tracked file (e.g., a Dropbox path or a git-tracked dotfile), or run 'hop config init' to bootstrap one at $XDG_CONFIG_HOME/hop/hop.yaml."
 	if err.Error() != want {
 		t.Fatalf("error mismatch:\n  want: %s\n  got:  %s", want, err.Error())
 	}
 }
 
-func TestResolveWriteTargetReposYamlMissing(t *testing.T) {
+// TestResolveReposYamlIgnored verifies that $REPOS_YAML is no longer consulted
+// — the rename is a clean break with no fallback.
+func TestResolveReposYamlIgnored(t *testing.T) {
+	clearConfigEnv(t)
+	dir := t.TempDir()
+	reposYaml := filepath.Join(dir, "repos.yaml")
+	if err := os.WriteFile(reposYaml, []byte(""), 0o644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	t.Setenv("REPOS_YAML", reposYaml)
+	t.Setenv("HOME", "/no-such-home-xyz")
+
+	_, err := Resolve()
+	if err == nil {
+		t.Fatalf("expected error (REPOS_YAML should be ignored), got nil")
+	}
+	if !strings.Contains(err.Error(), "no hop.yaml found") {
+		t.Fatalf("expected 'no hop.yaml found' (no REPOS_YAML fallback); got: %v", err)
+	}
+}
+
+func TestResolveWriteTargetHopConfigMissing(t *testing.T) {
 	clearConfigEnv(t)
 	missing := "/tmp/does-not-exist-xyz.yaml"
-	t.Setenv("REPOS_YAML", missing)
+	t.Setenv("HOP_CONFIG", missing)
 
 	got, err := ResolveWriteTarget()
 	if err != nil {
@@ -134,7 +154,7 @@ func TestResolveWriteTargetXDG(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveWriteTarget: %v", err)
 	}
-	if !strings.HasSuffix(got, "/custom/xdg/repo/repos.yaml") {
+	if !strings.HasSuffix(got, "/custom/xdg/hop/hop.yaml") {
 		t.Fatalf("expected XDG-rooted path, got %q", got)
 	}
 }
@@ -147,7 +167,7 @@ func TestResolveWriteTargetHome(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveWriteTarget: %v", err)
 	}
-	if got != "/home/test-user/.config/repo/repos.yaml" {
-		t.Fatalf("expected /home/test-user/.config/repo/repos.yaml, got %q", got)
+	if got != "/home/test-user/.config/hop/hop.yaml" {
+		t.Fatalf("expected /home/test-user/.config/hop/hop.yaml, got %q", got)
 	}
 }

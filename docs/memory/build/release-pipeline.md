@@ -1,6 +1,6 @@
 # Release Pipeline
 
-How `repo` cuts a release. Hand-rolled GitHub Actions workflow mirroring `~/code/sahil87/run-kit`'s shape, with a tag-driven version source (no `VERSION` file — `repo` is single-binary, so the git tag itself is the source of truth).
+How `hop` cuts a release. Hand-rolled GitHub Actions workflow mirroring `~/code/sahil87/run-kit`'s shape, with a tag-driven version source (no `VERSION` file — `hop` is single-binary, so the git tag itself is the source of truth).
 
 ## Trigger
 
@@ -45,7 +45,7 @@ Single job (`release`) on `ubuntu-latest`, `permissions: contents: write` (no ot
 3. **Extract version from tag** — sets two outputs from `${GITHUB_REF#refs/tags/}`:
    - `tag` (with `v` prefix, e.g. `v0.0.1`) — used for ldflags injection.
    - `version` (without prefix, e.g. `0.0.1`) — used for `sed` substitution into the formula.
-4. **Cross-compile** — loops over `darwin/arm64 darwin/amd64 linux/arm64 linux/amd64`, building with `CGO_ENABLED=0` and `-ldflags "-X main.version=${tag}"`. Each binary is tarred via `tar -czf "dist/${output}.tar.gz" -C "dist/${output}" repo` — archives contain only the `repo` binary (no LICENSE/README inside).
+4. **Cross-compile** — loops over `darwin/arm64 darwin/amd64 linux/arm64 linux/amd64`, building with `CGO_ENABLED=0` and `-ldflags "-X main.version=${tag}"`. Each binary is tarred via `tar -czf "dist/${output}.tar.gz" -C "dist/${output}" hop` — archives contain only the `hop` binary (no LICENSE/README inside).
 5. **Determine release notes base tag** — minor-aware logic: if the patch component is `0` (minor bump), `base_tag` is set to the earliest tag matching `v{major}.{minor-1}.*` (sorted by `version:refname`, head -1), so v0.2.0's notes span the entire 0.1.x series. For patch bumps and major bumps, `base_tag` is left unset (default behavior: compare against the immediate previous tag).
 6. **Create GitHub Release** via `softprops/action-gh-release` with `files: dist/*.tar.gz`, `generate_release_notes: true`, and `previous_tag: ${{ steps.release-base.outputs.base_tag }}`.
 7. **Update Homebrew tap** — see Formula template below.
@@ -69,37 +69,37 @@ A syntactically valid Homebrew Formula Ruby file with five placeholders that the
 | Placeholder | Replacement |
 |---|---|
 | `VERSION_PLACEHOLDER` | bare version (no `v` prefix), e.g. `0.0.1` |
-| `SHA_DARWIN_ARM64` | `sha256sum dist/repo-darwin-arm64.tar.gz` |
-| `SHA_DARWIN_AMD64` | `sha256sum dist/repo-darwin-amd64.tar.gz` |
-| `SHA_LINUX_ARM64`  | `sha256sum dist/repo-linux-arm64.tar.gz` |
-| `SHA_LINUX_AMD64`  | `sha256sum dist/repo-linux-amd64.tar.gz` |
+| `SHA_DARWIN_ARM64` | `sha256sum dist/hop-darwin-arm64.tar.gz` |
+| `SHA_DARWIN_AMD64` | `sha256sum dist/hop-darwin-amd64.tar.gz` |
+| `SHA_LINUX_ARM64`  | `sha256sum dist/hop-linux-arm64.tar.gz` |
+| `SHA_LINUX_AMD64`  | `sha256sum dist/hop-linux-amd64.tar.gz` |
 
-The substituted file is written to `Formula/repo.rb` in a clone of `sahil87/homebrew-tap`. The clone uses `https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/sahil87/homebrew-tap.git`. The commit is authored as `github-actions[bot]` with message `repo v<version>` and pushed directly to the tap's default branch (no PR).
+The substituted file is written to `Formula/hop.rb` in a clone of `sahil87/homebrew-tap`. The clone uses `https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/sahil87/homebrew-tap.git`. The commit is authored as `github-actions[bot]` with message `hop v<version>` and pushed directly to the tap's default branch (no PR).
 
 The published formula's structure:
 
-- `class Repo < Formula` opener.
+- `class Hop < Formula` opener.
 - `desc`, `homepage`, `version`, `license "MIT"` (informational — brew does not enforce).
 - `on_macos` block with nested `on_arm` / `on_intel` blocks declaring `url` and `sha256` for the two darwin tar.gz files.
 - `on_linux` block with the same shape for the two linux tar.gz files.
-- URLs follow `https://github.com/sahil87/repo/releases/download/v#{version}/repo-{os}-{arch}.tar.gz` — note the `v` prefix is re-added in the URL, so `version "VERSION_PLACEHOLDER"` stores the bare form.
-- `install` block: `bin.install "repo"`.
-- `test` block: `assert_match version.to_s, shell_output("#{bin}/repo --version")`.
+- URLs follow `https://github.com/sahil87/hop/releases/download/v#{version}/hop-{os}-{arch}.tar.gz` — note the `v` prefix is re-added in the URL, so `version "VERSION_PLACEHOLDER"` stores the bare form.
+- `install` block: `bin.install "hop"`.
+- `test` block: `assert_match version.to_s, shell_output("#{bin}/hop --version")`.
 
 ## Setup checklist
 
 One-time setup per repo:
 
-1. **Provision `HOMEBREW_TAP_TOKEN`** as a GitHub repository secret on `sahil87/repo`. It must be a fine-grained Personal Access Token with `Contents: write` permission scoped to `sahil87/homebrew-tap`. This step is manual (GitHub UI) and cannot be automated.
+1. **Provision `HOMEBREW_TAP_TOKEN`** as a GitHub repository secret on `sahil87/hop`. It must be a fine-grained Personal Access Token with `Contents: write` permission scoped to `sahil87/homebrew-tap`. This step is manual (GitHub UI) and cannot be automated.
 2. **Verify the tap repo** — `sahil87/homebrew-tap` must exist and the bot must have push access via the token. The `Formula/` directory already exists (it hosts `Formula/rk.rb` for run-kit).
 
 ## Release-day runbook
 
 1. `just release [patch|minor|major]` (default `patch`) on a clean working tree, on a branch.
-2. Watch the workflow at `https://github.com/sahil87/repo/actions`.
-3. Verify the GitHub Release page shows four `repo-{os}-{arch}.tar.gz` assets (no separate `checksums.txt` is published).
-4. Verify `sahil87/homebrew-tap` got a new commit adding/updating `Formula/repo.rb` authored by `github-actions[bot]`.
-5. Smoke test in a clean shell: `brew install sahil87/tap/repo && repo --version` should print `repo version v<version>`.
+2. Watch the workflow at `https://github.com/sahil87/hop/actions`.
+3. Verify the GitHub Release page shows four `hop-{os}-{arch}.tar.gz` assets (no separate `checksums.txt` is published).
+4. Verify `sahil87/homebrew-tap` got a new commit adding/updating `Formula/hop.rb` authored by `github-actions[bot]`.
+5. Smoke test in a clean shell: `brew install sahil87/tap/hop && hop --version` should print `hop version v<version>`.
 
 If `HOMEBREW_TAP_TOKEN` is missing or invalid, the tap-update step fails on `git clone` with an auth error. The GitHub Release (created in the prior step) remains published — re-running typically means provisioning the secret and tagging again (e.g., `v0.0.2`).
 
@@ -110,8 +110,8 @@ These are policy decisions, not deferrals:
 - **Code signing / notarization** — binaries ship unsigned. macOS users see a Gatekeeper warning on first run for direct downloads; brew installs typically don't trip it as hard. An Apple Developer account ($99/yr) is not justified for personal-tooling CLIs.
 - **Linux native packaging** (`.deb`, `.rpm`, custom apt/dnf repos) — Linux users install via brew-on-Linux or direct tar.gz download.
 - **Prerelease tags** (`v0.0.1-rc.1`) — `release.sh` accepts only `patch|minor|major`. Adding RC support is ~30 LOC across the script and the workflow if/when iterative pipeline testing becomes valuable.
-- **A `VERSION` file** — git tag is the single source of truth (single-binary repo; run-kit's multi-binary `VERSION`-file rationale doesn't apply).
-- **Goreleaser** — the minor-aware base-tag logic for release notes is awkward in goreleaser (requires disabling its changelog and using post-hoc `gh release edit`); cleaner here via `softprops/action-gh-release`'s `previous_tag` parameter. Switching back is a one-evening rewrite if the repo grows multiple binaries or wants signing/Docker/Snap.
+- **A `VERSION` file** — git tag is the single source of truth (single-binary project; run-kit's multi-binary `VERSION`-file rationale doesn't apply).
+- **Goreleaser** — the minor-aware base-tag logic for release notes is awkward in goreleaser (requires disabling its changelog and using post-hoc `gh release edit`); cleaner here via `softprops/action-gh-release`'s `previous_tag` parameter. Switching back is a one-evening rewrite if the project grows multiple binaries or wants signing/Docker/Snap.
 
 ## Cross-references
 

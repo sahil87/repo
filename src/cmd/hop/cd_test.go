@@ -9,7 +9,7 @@ import (
 func TestCdReturnsExitCodeError(t *testing.T) {
 	_, _, err := runArgs(t, "cd", "anything")
 	if err == nil {
-		t.Fatalf("expected error from `repo cd`")
+		t.Fatalf("expected error from `hop cd`")
 	}
 	var withCode *errExitCode
 	if !errors.As(err, &withCode) {

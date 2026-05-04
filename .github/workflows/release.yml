@@ -37,13 +37,13 @@ jobs:
           for target in $targets; do
             os="${target%/*}"
             arch="${target#*/}"
-            output="repo-${os}-${arch}"
+            output="hop-${os}-${arch}"
             echo "Building ${output}..."
             mkdir -p "../dist/${output}"
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
               go build -ldflags "-X main.version=${{ steps.version.outputs.tag }}" \
-              -o "../dist/${output}/repo" ./cmd/repo
-            tar -czf "../dist/${output}.tar.gz" -C "../dist/${output}" repo
+              -o "../dist/${output}/hop" ./cmd/hop
+            tar -czf "../dist/${output}.tar.gz" -C "../dist/${output}" hop
           done
 
       - name: Determine release notes base tag
@@ -83,10 +83,10 @@ jobs:
         run: |
           version="${{ steps.version.outputs.version }}"
 
-          sha_darwin_arm64=$(sha256sum dist/repo-darwin-arm64.tar.gz | cut -d' ' -f1)
-          sha_darwin_amd64=$(sha256sum dist/repo-darwin-amd64.tar.gz | cut -d' ' -f1)
-          sha_linux_arm64=$(sha256sum dist/repo-linux-arm64.tar.gz | cut -d' ' -f1)
-          sha_linux_amd64=$(sha256sum dist/repo-linux-amd64.tar.gz | cut -d' ' -f1)
+          sha_darwin_arm64=$(sha256sum dist/hop-darwin-arm64.tar.gz | cut -d' ' -f1)
+          sha_darwin_amd64=$(sha256sum dist/hop-darwin-amd64.tar.gz | cut -d' ' -f1)
+          sha_linux_arm64=$(sha256sum dist/hop-linux-arm64.tar.gz | cut -d' ' -f1)
+          sha_linux_amd64=$(sha256sum dist/hop-linux-amd64.tar.gz | cut -d' ' -f1)
 
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/sahil87/homebrew-tap.git" /tmp/homebrew-tap
 
@@ -96,11 +96,11 @@ jobs:
             -e "s/SHA_DARWIN_AMD64/${sha_darwin_amd64}/" \
             -e "s/SHA_LINUX_ARM64/${sha_linux_arm64}/" \
             -e "s/SHA_LINUX_AMD64/${sha_linux_amd64}/" \
-            .github/formula-template.rb > /tmp/homebrew-tap/Formula/repo.rb
+            .github/formula-template.rb > /tmp/homebrew-tap/Formula/hop.rb
 
           cd /tmp/homebrew-tap
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/repo.rb
-          git commit -m "repo v${version}"
+          git add Formula/hop.rb
+          git commit -m "hop v${version}"
           git push

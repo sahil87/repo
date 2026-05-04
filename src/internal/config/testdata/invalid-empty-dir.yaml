@@ -1,0 +1,5 @@
+repos:
+  vendor:
+    dir: ""
+    urls:
+      - git@github.com:foo/bar.git

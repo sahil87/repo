@@ -1,0 +1,7 @@
+repos:
+  default:
+    - git@github.com:foo/bar.git
+  vendor:
+    dir: ~/vendor
+    urls:
+      - git@github.com:foo/bar.git

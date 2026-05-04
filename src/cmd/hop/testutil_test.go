@@ -37,24 +37,28 @@ func runCmd(t *testing.T, factory func() *cobra.Command, args ...string) (stdout
 	return stdout, stderr, err
 }
 
-// writeReposFixture writes a repos.yaml under t.TempDir() and points $REPOS_YAML at it.
-// Returns the full path. yamlBody is written verbatim.
+// writeReposFixture writes a hop.yaml under t.TempDir() and points $HOP_CONFIG at it.
+// Returns the full path. yamlBody is written verbatim. Also clears legacy env vars
+// so tests are deterministic.
 func writeReposFixture(t *testing.T, yamlBody string) string {
 	t.Helper()
 	dir := t.TempDir()
-	path := filepath.Join(dir, "repos.yaml")
+	path := filepath.Join(dir, "hop.yaml")
 	if err := os.WriteFile(path, []byte(yamlBody), 0o644); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
-	t.Setenv("REPOS_YAML", path)
+	t.Setenv("HOP_CONFIG", path)
 	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("REPOS_YAML", "")
 	os.Unsetenv("XDG_CONFIG_HOME")
+	os.Unsetenv("REPOS_YAML")
 	return path
 }
 
-// clearConfigEnv unsets all three config env vars.
+// clearConfigEnv unsets all config env vars.
 func clearConfigEnv(t *testing.T) {
 	t.Helper()
+	os.Unsetenv("HOP_CONFIG")
 	os.Unsetenv("REPOS_YAML")
 	os.Unsetenv("XDG_CONFIG_HOME")
 	t.Setenv("HOME", os.Getenv("HOME")) // preserve HOME for ~ expansion in tests that rely on it

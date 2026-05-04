@@ -15,18 +15,23 @@ import (
 )
 
 // fzfMissingHint is the exact stderr line printed when fzf is required but absent.
-const fzfMissingHint = "repo: fzf is not installed. Install it: brew install fzf (macOS) or apt install fzf (Debian)."
+const fzfMissingHint = "hop: fzf is not installed. Install it: brew install fzf (macOS) or apt install fzf (Debian)."
 
 // errFzfCancelled signals fzf user cancellation (Esc / Ctrl-C). The handler maps
 // this to exit code 130. We use a sentinel so callers can distinguish from other
 // errors without parsing exit codes from string output.
 var errFzfCancelled = errors.New("fzf cancelled")
 
+// errFzfMissing signals that fzf is not on PATH. resolveByName returns this so
+// callers can write the install hint to their own stderr (cobra's stderr for
+// subcommands, os.Stderr for the -C path).
+var errFzfMissing = errors.New("fzf missing")
+
 // errSilent is a sentinel error returned to cobra when stderr has already been
 // written and we just want to exit 1 without re-emitting the error message.
 var errSilent = errors.New("silent")
 
-// loadRepos resolves repos.yaml and parses it into a Repos list.
+// loadRepos resolves hop.yaml and parses it into a Repos list.
 func loadRepos() (repos.Repos, error) {
 	path, err := config.Resolve()
 	if err != nil {
@@ -39,50 +44,36 @@ func loadRepos() (repos.Repos, error) {
 	return repos.FromConfig(cfg)
 }
 
-// resolveOne resolves a single Repo via the match-or-fzf algorithm from
-// docs/specs/cli-surface.md §"Match Resolution Algorithm".
-//
-// Returns:
-//   - exact match (substring narrows to 1) → that repo, no fzf invocation
-//   - 0 or 2+ matches → fzf with --query <query> --select-1 (full list piped to stdin)
-//   - empty query → fzf with no --query (full picker)
-//
-// On fzf cancellation, returns errFzfCancelled. The caller maps this to exit 130.
-// On fzf-missing (proc.ErrNotFound), writes the install hint to stderr and returns errSilent.
-func resolveOne(cmd *cobra.Command, query string) (*repos.Repo, error) {
+// resolveByName resolves a single Repo via the match-or-fzf algorithm without
+// writing to any stderr. It returns errFzfMissing when fzf is needed but not
+// on PATH; the caller is responsible for writing fzfMissingHint to the
+// appropriate stderr. Returns errFzfCancelled on Esc/Ctrl-C.
+func resolveByName(query string) (*repos.Repo, error) {
 	rs, err := loadRepos()
 	if err != nil {
 		return nil, err
 	}
 
-	candidates := rs
 	if query != "" {
-		candidates = rs.MatchOne(query)
+		candidates := rs.MatchOne(query)
 		if len(candidates) == 1 {
 			return &candidates[0], nil
 		}
 	}
 
-	// 0 or 2+ matches, OR empty query → fzf picker over the full repo list
-	// (fzf does its own filtering via --query).
-	pickerLines := make([]string, 0, len(rs))
-	for _, r := range rs {
-		// tab-separated for --with-nth/--delimiter; fzf displays only column 1
-		pickerLines = append(pickerLines, r.Name+"\t"+r.Path+"\t"+r.URL)
-	}
+	pickerLines := buildPickerLines(rs)
 
 	selected, err := fzf.Pick(context.Background(), pickerLines, query)
 	if err != nil {
 		if errors.Is(err, proc.ErrNotFound) {
-			fmt.Fprintln(cmd.ErrOrStderr(), fzfMissingHint)
-			return nil, errSilent
+			return nil, errFzfMissing
 		}
 		// fzf returns exit 130 on Esc/Ctrl-C → treat as cancellation.
 		// Any other failure (non-130 exit, I/O error) surfaces as a real error.
 		if code, ok := proc.ExitCode(err); ok && code == 130 {
 			return nil, errFzfCancelled
 		}
-		return nil, fmt.Errorf("repo: fzf failed: %w", err)
+		return nil, fmt.Errorf("hop: fzf failed: %w", err)
 	}
 
 	// Match the full selected line back to its source Repo. fzf returns the same
@@ -90,7 +81,7 @@ func resolveOne(cmd *cobra.Command, query string) (*repos.Repo, error) {
 	// so matching on it disambiguates the case where two repos share a derived name.
 	parts := strings.SplitN(selected, "\t", 3)
 	if len(parts) < 2 {
-		return nil, fmt.Errorf("repo: malformed fzf selection %q", selected)
+		return nil, fmt.Errorf("hop: malformed fzf selection %q", selected)
 	}
 	chosenPath := parts[1]
 	for i := range rs {
@@ -98,11 +89,46 @@ func resolveOne(cmd *cobra.Command, query string) (*repos.Repo, error) {
 			return &rs[i], nil
 		}
 	}
-	return nil, fmt.Errorf("repo: selection %q not found in repo list", selected)
+	return nil, fmt.Errorf("hop: selection %q not found in repo list", selected)
+}
+
+// buildPickerLines builds the tab-separated lines piped to fzf. When two or
+// more repos share a Name, the displayed first column is suffixed with
+// " [<group>]" so the user can disambiguate. The path column (used for
+// match-back) and URL column are always the second and third columns.
+func buildPickerLines(rs repos.Repos) []string {
+	nameCount := make(map[string]int, len(rs))
+	for _, r := range rs {
+		nameCount[r.Name]++
+	}
+	out := make([]string, 0, len(rs))
+	for _, r := range rs {
+		display := r.Name
+		if nameCount[r.Name] > 1 {
+			display = r.Name + " [" + r.Group + "]"
+		}
+		out = append(out, display+"\t"+r.Path+"\t"+r.URL)
+	}
+	return out
+}
+
+// resolveOne is the cobra-friendly wrapper around resolveByName: on
+// errFzfMissing it writes fzfMissingHint to the cobra command's stderr and
+// returns errSilent so cobra exits 1 cleanly. Other errors propagate.
+func resolveOne(cmd *cobra.Command, query string) (*repos.Repo, error) {
+	repo, err := resolveByName(query)
+	if err != nil {
+		if errors.Is(err, errFzfMissing) {
+			fmt.Fprintln(cmd.ErrOrStderr(), fzfMissingHint)
+			return nil, errSilent
+		}
+		return nil, err
+	}
+	return repo, nil
 }
 
 // resolveAndPrint resolves a single repo via resolveOne and prints its absolute path to stdout.
-// Used by `repo <name>` (root bare form) and `repo path <name>`.
+// Used by `hop <name>` (root bare form) and `hop where <name>`.
 func resolveAndPrint(cmd *cobra.Command, query string) error {
 	repo, err := resolveOne(cmd, query)
 	if err != nil {
@@ -112,9 +138,9 @@ func resolveAndPrint(cmd *cobra.Command, query string) error {
 	return nil
 }
 
-func newPathCmd() *cobra.Command {
+func newWhereCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "path <name>",
+		Use:   "where <name>",
 		Short: "echo absolute path of matching repo",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

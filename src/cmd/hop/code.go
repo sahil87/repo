@@ -8,14 +8,15 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sahil87/repo/internal/platform"
 	"github.com/sahil87/repo/internal/proc"
 )
 
-func newOpenCmd() *cobra.Command {
+const codeMissingHint = "hop code: 'code' command not found. Install VSCode and ensure 'code' is on your PATH."
+
+func newCodeCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "open [<name>]",
-		Short: "open the resolved repo in the OS file manager",
+		Use:   "code [<name>]",
+		Short: "open VSCode at the resolved repo",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			query := ""
@@ -28,9 +29,9 @@ func newOpenCmd() *cobra.Command {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			if err := platform.Open(ctx, repo.Path); err != nil {
+			if _, err := proc.Run(ctx, "code", repo.Path); err != nil {
 				if errors.Is(err, proc.ErrNotFound) {
-					fmt.Fprintf(cmd.ErrOrStderr(), "repo open: '%s' not found.\n", platform.OpenTool())
+					fmt.Fprintln(cmd.ErrOrStderr(), codeMissingHint)
 					return errSilent
 				}
 				return err

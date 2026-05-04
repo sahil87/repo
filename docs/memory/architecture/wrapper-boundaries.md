@@ -1,6 +1,6 @@
 # Wrapper Boundaries
 
-How `repo` wraps external tools and isolates platform-specific code. Enforces Constitution Principle I (Security First) and Principle IV (Wrap, Don't Reinvent).
+How `hop` wraps external tools and isolates platform-specific code. Enforces Constitution Principle I (Security First) and Principle IV (Wrap, Don't Reinvent).
 
 ## `internal/proc` — the security choke point
 
@@ -14,7 +14,7 @@ grep --include='*.go' --exclude='*_test.go' -rn 'exec\.Command\b' src/
 # → zero matches (only exec.CommandContext is permitted)
 ```
 
-Test files (`*_test.go`) MAY use `os/exec` directly to spawn the built binary in integration tests; the audits scope to non-test code.
+Test files (`*_test.go`) MAY use `os/exec` directly — to spawn the built binary in integration tests, or to set up local git fixtures (e.g., `git init --bare` for ad-hoc URL clone tests). The audits scope to non-test code.
 
 ### API
 
@@ -22,9 +22,11 @@ Test files (`*_test.go`) MAY use `os/exec` directly to spawn the built binary in
 |---|---|
 | `Run(ctx, name, args...) ([]byte, error)` | Non-interactive. Captures stdout to bytes; stderr passes through to parent. |
 | `RunInteractive(ctx, stdin io.Reader, name, args...) (string, error)` | Pipes stdin, captures stdout to string; stderr passes through. Used for fzf. |
+| `RunForeground(ctx, dir, name, args...) (int, error)` | Runs a child with `cmd.Dir = dir` and stdin/stdout/stderr **inherited** from the parent. Returns the child's exit code on success (error nil); returns `(-1, ErrNotFound)` if the binary is missing; returns `(-1, err)` for other I/O / exec failures. Used by `hop -C`. |
 | `var ErrNotFound` | Sentinel returned when the binary is not on PATH. Callers use `errors.Is(err, proc.ErrNotFound)` to produce install-hint messages. |
+| `ExitCode(err) (int, bool)` | Helper to extract the child's exit code from an `*exec.ExitError` without callers needing to import `os/exec`. |
 
-Both functions use `exec.CommandContext(ctx, name, args...)` — never `exec.Command`, never shell strings. Callers supply the `context.Context` (with timeout for non-interactive ops; `context.Background()` for fzf since the user is at the keyboard).
+All three runner functions use `exec.CommandContext(ctx, name, args...)` — never `exec.Command`, never shell strings. Callers supply the `context.Context` (with timeout for non-interactive ops; `context.Background()` for fzf and `-C` since the user is at the keyboard / running an arbitrary child).
 
 ## `internal/fzf` — fzf wrapper
 
@@ -38,6 +40,16 @@ Both functions use `exec.CommandContext(ctx, name, args...)` — never `exec.Com
 
 Why a dedicated package: the invocation is non-trivial (multiple flags, stdin piping, query prefill) and used by 5+ subcommands. Worth one file.
 
+## `internal/yamled` — comment-preserving YAML write-back
+
+`AppendURL(path, group, url string) error`:
+
+- Reads the file, parses to `*yaml.Node`, navigates `repos.<group>`, appends a new scalar to either the sequence body (flat group) or the `urls:` child sequence (map-shaped group), marshals, and writes back via temp file + `os.Rename` (atomic on the same filesystem).
+- Comments are preserved by the yaml.v3 round-trip. **Indentation is normalized to yaml.v3 defaults** — comment preservation is the contract, byte-perfect formatting is not.
+- `ErrGroupNotFound` is a sentinel wrapped via `%w` when the named group is absent. Detect via `errors.Is(err, yamled.ErrGroupNotFound)`.
+
+Why a dedicated package separate from `internal/config`: `config` validates and consumes; `yamled` produces a node tree, navigates, mutates, writes. Different responsibilities — `config` is the schema validator; `yamled` is a node-level mutator. Either can be tested independently.
+
 ## `internal/platform` — OS isolation via build tags
 
 `platform.go` declares the package only (no exported symbols). The two build-tagged files implement `Open`:
@@ -45,7 +57,7 @@ Why a dedicated package: the invocation is non-trivial (multiple flags, stdin pi
 - `open_darwin.go` — `//go:build darwin`; calls `proc.Run(ctx, "open", path)`. `OpenTool() string` returns `"open"`.
 - `open_linux.go` — `//go:build linux`; calls `proc.Run(ctx, "xdg-open", path)`. `OpenTool() string` returns `"xdg-open"`.
 
-`OpenTool()` exists so `cmd/repo/open.go` can format the missing-tool stderr (`repo open: 'open' not found.` vs `repo open: 'xdg-open' not found.`) without knowing which OS it's on.
+`OpenTool()` exists so `cmd/hop/open.go` can format the missing-tool stderr (`hop open: 'open' not found.` vs `hop open: 'xdg-open' not found.`) without knowing which OS it's on.
 
 Other platforms (Windows) fail at link time — by design (Constitution Cross-Platform Behavior).
 
@@ -57,12 +69,23 @@ Per Constitution Principle IV ("Wrap, Don't Reinvent") — wrap external tools, 
 
 | External call | Where | Why no wrapper package |
 |---|---|---|
-| `git clone` | `cmd/repo/clone.go` calls `proc.Run(ctx, "git", "clone", url, path)` inline | Single operation; a 5-line `internal/git/` package is premature abstraction. Promote later if `git fetch` / `git pull` / `git status` get added. |
-| `code` | `cmd/repo/code.go` calls `proc.Run(ctx, "code", path)` inline | Single operation. |
-| YAML parsing | `internal/config/config.go` calls `yaml.Unmarshal` directly | `gopkg.in/yaml.v3` already is the wrapper. |
+| `git clone` | `cmd/hop/clone.go` calls `proc.Run(ctx, "git", "clone", url, path)` inline | Single operation; a 5-line `internal/git/` package is premature abstraction. Promote later if `git fetch` / `git pull` / `git status` get added. |
+| `code` | `cmd/hop/code.go` calls `proc.Run(ctx, "code", path)` inline | Single operation. |
+| YAML parsing | `internal/config/config.go` calls `yaml.Unmarshal` directly into `*yaml.Node` | `gopkg.in/yaml.v3` already is the wrapper. |
+| `-C` child exec | `cmd/hop/main.go::runDashC` calls `proc.RunForeground` | Wrapping is `internal/proc`'s job; the binary just composes. |
+
+## Composability primitives
+
+The change introduced two primitives that other operations build on:
+
+- **`hop where <name>`** — path resolver. Stdin/stdout-friendly: `cd "$(hop where outbox)"` works as a shell composition.
+- **`hop -C <name> <cmd>...`** — exec-in-context. `git -C`-style: run a child command with cwd set to the resolved repo dir, without leaving the parent shell's cwd changed.
+
+Future verbs (`sync`, `autosync`, `features`) build on these rather than each one re-implementing path resolution and exec.
 
 ## Security guarantees
 
 1. **`exec.CommandContext` everywhere** — kernel never sees a shell string; argv is an explicit slice.
-2. **User input passes as args, not shell tokens** — repo names from `repos.yaml` reach `git clone` via `proc.Run("git", "clone", url, path)`; fzf queries reach fzf as `--query <q>` (a single arg) and the candidate list is on stdin.
+2. **User input passes as args, not shell tokens** — repo names from `hop.yaml` reach `git clone` via `proc.Run("git", "clone", url, path)`; fzf queries reach fzf as `--query <q>` (a single arg) and the candidate list is on stdin; `-C`'s child argv is forwarded as a slice to `proc.RunForeground`.
 3. **No `sh -c`, no `bash -c`, no command-string interpolation anywhere in production code.**
+4. **Atomic file writes** — `internal/yamled` uses temp file + rename in the same directory, preserving the original on rename failure.
