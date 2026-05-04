@@ -14,9 +14,10 @@ import (
 
 func newOpenCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "open [<name>]",
-		Short: "open the resolved repo in the OS file manager",
-		Args:  cobra.MaximumNArgs(1),
+		Use:               "open [<name>]",
+		Short:             "open the resolved repo in the OS file manager",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeRepoNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			query := ""
 			if len(args) == 1 {

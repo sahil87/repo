@@ -31,9 +31,10 @@ func newCloneCmd() *cobra.Command {
 		nameOverride string
 	)
 	cmd := &cobra.Command{
-		Use:   "clone [<name> | <url> | --all]",
-		Short: "git clone the resolved repo, an ad-hoc URL, or all missing repos with --all",
-		Args:  cobra.MaximumNArgs(1),
+		Use:               "clone [<name> | <url> | --all]",
+		Short:             "git clone the resolved repo, an ad-hoc URL, or all missing repos with --all",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeCloneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if all {
 				return cloneAll(cmd)

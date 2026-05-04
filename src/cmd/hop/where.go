@@ -140,9 +140,10 @@ func resolveAndPrint(cmd *cobra.Command, query string) error {
 
 func newWhereCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "where <name>",
-		Short: "echo absolute path of matching repo",
-		Args:  cobra.ExactArgs(1),
+		Use:               "where <name>",
+		Short:             "echo absolute path of matching repo",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeRepoNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return resolveAndPrint(cmd, args[0])
 		},

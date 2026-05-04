@@ -15,9 +15,10 @@ const codeMissingHint = "hop code: 'code' command not found. Install VSCode and 
 
 func newCodeCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "code [<name>]",
-		Short: "open VSCode at the resolved repo",
-		Args:  cobra.MaximumNArgs(1),
+		Use:               "code [<name>]",
+		Short:             "open VSCode at the resolved repo",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeRepoNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			query := ""
 			if len(args) == 1 {
