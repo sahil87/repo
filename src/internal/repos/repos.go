@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sahil87/repo/internal/config"
+	"github.com/sahil87/hop/internal/config"
 )
 
 // Repo describes a single repository entry. Path is the on-disk location

@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sahil87/repo/internal/platform"
-	"github.com/sahil87/repo/internal/proc"
+	"github.com/sahil87/hop/internal/platform"
+	"github.com/sahil87/hop/internal/proc"
 )
 
 func newOpenCmd() *cobra.Command {

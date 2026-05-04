@@ -3,7 +3,7 @@ package repos
 import (
 	"testing"
 
-	"github.com/sahil87/repo/internal/config"
+	"github.com/sahil87/hop/internal/config"
 )
 
 func TestFromConfigFlatGroup(t *testing.T) {

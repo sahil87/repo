@@ -11,10 +11,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sahil87/repo/internal/config"
-	"github.com/sahil87/repo/internal/proc"
-	"github.com/sahil87/repo/internal/repos"
-	"github.com/sahil87/repo/internal/yamled"
+	"github.com/sahil87/hop/internal/config"
+	"github.com/sahil87/hop/internal/proc"
+	"github.com/sahil87/hop/internal/repos"
+	"github.com/sahil87/hop/internal/yamled"
 )
 
 const (

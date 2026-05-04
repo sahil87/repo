@@ -1,5 +1,5 @@
 ~/code/sahil87:
-  - git@github.com:sahil87/repo.git
+  - git@github.com:sahil87/hop.git
   not-valid:
     - missing
    bad-indent

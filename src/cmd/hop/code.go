@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sahil87/repo/internal/proc"
+	"github.com/sahil87/hop/internal/proc"
 )
 
 const codeMissingHint = "hop code: 'code' command not found. Install VSCode and ensure 'code' is on your PATH."

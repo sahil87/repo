@@ -1,4 +1,4 @@
-# repo Constitution
+# hop Constitution
 
 ## Core Principles
 
@@ -6,10 +6,10 @@
 All process execution MUST use `exec.CommandContext` with explicit argument slices — never shell strings or `exec.Command` without a context/timeout. User-provided input (repo names, paths, queries) SHALL be validated before passing to any subprocess (`git`, `code`, `open`, `xdg-open`, `fzf`). Shell injection is a show-stopper. This is non-negotiable.
 
 ### II. No Database
-State MUST be derived from `repos.yaml` and the filesystem at request time. repo SHALL NOT introduce a database, cache file, or persistent state store. Every invocation re-reads the YAML and re-checks disk. If you can't derive it from these sources, you don't need it.
+State MUST be derived from `hop.yaml` and the filesystem at request time. hop SHALL NOT introduce a database, cache file, or persistent state store. Every invocation re-reads the YAML and re-checks disk. If you can't derive it from these sources, you don't need it.
 
 ### III. Convention Over Configuration
-repo SHOULD derive values from conventions rather than requiring explicit configuration. Repo names from `repos.yaml` URL basenames (with `.git` stripped). Paths from `<dir>/<name>` joins. The only required config is `repos.yaml` itself. New flags and env vars SHALL be added only when convention genuinely cannot suffice.
+hop SHOULD derive values from conventions rather than requiring explicit configuration. Repo names from `hop.yaml` URL basenames (with `.git` stripped). Paths from `<dir>/<name>` joins (or `<code_root>/<org>/<name>` for convention-driven flat groups). The only required config is `hop.yaml` itself. New flags and env vars SHALL be added only when convention genuinely cannot suffice.
 
 ### IV. Wrap, Don't Reinvent
 External tools (`git`, `fzf`, `yq` equivalents in Go, `code`, `open`, `xdg-open`) MUST be wrapped via internal packages, not reimplemented. For YAML, use a Go YAML library — do not parse by hand. For fzf, shell out — do not embed a fuzzy matcher. When a battle-tested tool does what you need, call it.
@@ -18,7 +18,7 @@ External tools (`git`, `fzf`, `yq` equivalents in Go, `code`, `open`, `xdg-open`
 The build system MUST mirror fab-kit's structure: `justfile` recipes are one-liners that delegate to `scripts/`. Logic, loops, and conditionals belong in shell scripts — the justfile is an index, not an implementation. Releases SHALL be cut by tagging `v*`, with a GitHub Actions workflow that builds cross-platform binaries, publishes a GitHub Release, and updates `homebrew-tap`. Local development uses `just build` and `just install` to populate a local cache.
 
 ### VI. Minimal Surface Area
-repo is a locator. New top-level subcommands require explicit justification in the change's intake — "could this be a flag on an existing subcommand, or a separate tool?" must be answered "no" before adding one.
+hop is a locator. New top-level subcommands require explicit justification in the change's intake — "could this be a flag on an existing subcommand, or a separate tool?" must be answered "no" before adding one.
 
 ## Additional Constraints
 

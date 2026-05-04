@@ -1,8 +1,8 @@
 fab_version: 1.6.1
 
 project:
-  name: "repo"
-  description: "Go CLI for quick repo operations — locate, open, list, and clone repos from repos.yaml."
+  name: "hop"
+  description: "Go CLI for quick repo operations — locate, open, list, and clone repos from hop.yaml."
 
 # Directories containing implementation code (relative to repo root).
 source_paths:

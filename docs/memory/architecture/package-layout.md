@@ -1,12 +1,12 @@
 # Package Layout
 
-How the Go source tree is organized for the `hop` binary. Module path remains `github.com/sahil87/repo` (deliberately unchanged in this rename — module path is internal, binary name is what users see; renaming the module is a separate concern deferred unless friction emerges). The module is rooted at `src/go.mod`, not the repo root.
+How the Go source tree is organized for the `hop` binary. Module path is `github.com/sahil87/hop`. The module is rooted at `src/go.mod`, not the repo root.
 
 ## Tree
 
 ```
 src/
-├── go.mod                        # module github.com/sahil87/repo, go 1.22
+├── go.mod                        # module github.com/sahil87/hop, go 1.22
 ├── go.sum
 ├── cmd/hop/                      # one cobra entrypoint (renamed from cmd/repo/)
 │   ├── main.go                   # entrypoint + translateExit + extractDashC + runDashC
@@ -50,7 +50,7 @@ src/
 
 | Convention | Value |
 |---|---|
-| Module path | `github.com/sahil87/repo` (unchanged for v1) |
+| Module path | `github.com/sahil87/hop` |
 | `go.mod` location | `src/go.mod` (not repo root — mirrors `fab-kit/src/go/wt`) |
 | Go version | `1.22` |
 | CLI framework | `github.com/spf13/cobra` v1.8.1 |

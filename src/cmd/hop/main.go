@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sahil87/repo/internal/proc"
+	"github.com/sahil87/hop/internal/proc"
 )
 
 // version is the binary version, overridden via -ldflags "-X main.version=..." at build time.

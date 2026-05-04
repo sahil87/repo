@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sahil87/repo/internal/repos"
+	"github.com/sahil87/hop/internal/repos"
 )
 
 // fixture used by several tests; using an absolute dir for the group's `dir`

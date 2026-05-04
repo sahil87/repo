@@ -8,10 +8,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sahil87/repo/internal/config"
-	"github.com/sahil87/repo/internal/fzf"
-	"github.com/sahil87/repo/internal/proc"
-	"github.com/sahil87/repo/internal/repos"
+	"github.com/sahil87/hop/internal/config"
+	"github.com/sahil87/hop/internal/fzf"
+	"github.com/sahil87/hop/internal/proc"
+	"github.com/sahil87/hop/internal/repos"
 )
 
 // fzfMissingHint is the exact stderr line printed when fzf is required but absent.

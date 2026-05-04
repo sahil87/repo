@@ -6,7 +6,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/sahil87/repo/internal/proc"
+	"github.com/sahil87/hop/internal/proc"
 )
 
 // runInteractive is the seam for tests to inject a fake invocation.

@@ -6,7 +6,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/sahil87/repo/internal/proc"
+	"github.com/sahil87/hop/internal/proc"
 )
 
 func TestBuildArgsWithQuery(t *testing.T) {

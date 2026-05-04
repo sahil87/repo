@@ -5,7 +5,7 @@ package platform
 import (
 	"context"
 
-	"github.com/sahil87/repo/internal/proc"
+	"github.com/sahil87/hop/internal/proc"
 )
 
 // Open opens path in the OS file manager.

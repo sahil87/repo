@@ -1,4 +1,4 @@
-module github.com/sahil87/repo
+module github.com/sahil87/hop
 
 go 1.22
 
