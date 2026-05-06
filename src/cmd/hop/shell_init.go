@@ -11,24 +11,22 @@ import (
 // Both shells understand `[[ ]]`, `${@:2}` slicing, and `local`. The completion
 // suffix (cobra-generated zsh or bash completion) is appended per-shell at the end.
 //
-// Resolution order in the hop() function (precedence ladder):
+// Resolution order in the hop() function (4-step ladder):
 //
 //  1. No args                                           → bare picker
-//  2. $1 is a flag                                      → forward to binary
-//  3. $1 is __complete*                                 → forward to binary (cobra completion)
-//  4. $1 is a known subcommand                          → _hop_dispatch (subcommand wins over tool)
-//  5. $1 is the only arg                                → _hop_dispatch cd "$1" (bare-name → cd, repo > tool)
-//  6. $1 is on PATH AND $2 is non-flag                  → tool-form: command hop -R "$2" "$1" "${@:3}"
-//  7. otherwise                                         → forward to binary (let cobra emit error)
+//  2. $1 is __complete*                                 → forward to binary (cobra completion)
+//  3. $1 is a known subcommand                          → _hop_dispatch
+//  4. $1 is a flag                                      → forward to binary
+//  5. otherwise ($1 is treated as a repo name):
+//       $# == 1                                         → _hop_dispatch cd "$1" (bare-name → cd)
+//       $2 == "-R"                                      → command hop -R "$1" "${@:3}" (canonical exec form)
+//       otherwise                                       → command hop -R "$1" "$2" "${@:3}" (tool-form sugar)
 //
-// Tool-form (rule 6) requires $1 to be an executable on PATH — not a builtin,
-// keyword, alias, or function. POSIX `command -v` returns the absolute path
-// for a real binary, but only the bare name for builtins/keywords (e.g. `pwd`,
-// `if`); the leading-slash check filters those out cleanly in both zsh and
-// bash. Repo > tool is enforced by rule 5 running before rule 6: if
-// `hop cursor` (1 arg, cursor is a repo), it never reaches the tool-form
-// check. With 2+ args (`hop cursor dotfiles`), there's no competing repo
-// interpretation, so tool-form wins.
+// The shim does NOT inspect PATH for $1 or $2 — the grammar is "subcommand
+// xor repo" in $1, and $2 is either `-R` or a tool name. Missing tools surface
+// via the binary's `hop: -R: '<cmd>' not found.` error. The shim rewrites the
+// user-facing `hop <name> -R <cmd>...` form to `command hop -R <name> <cmd>...`
+// so the binary's extractDashR continues to see the existing internal shape.
 const posixInit = `# hop shell integration — emit via: eval "$(hop shell-init <shell>)"
 # Installs: hop function (with bare-name dispatch + tool-form), h alias, hi alias, completion.
 
@@ -45,59 +43,26 @@ hop() {
       # __complete through the bare-name dispatcher and treat it as a repo name.
       command hop "$@"
       ;;
-    cd|clone|where|ls|open|shell-init|config|update|help|--help|-h|--version|completion)
+    cd|clone|where|ls|shell-init|config|update|help|--help|-h|--version|completion)
       _hop_dispatch "$@"
       ;;
     -*)
       command hop "$@"
       ;;
     *)
+      # $1 is a repo name (the grammar is "subcommand xor repo" — never a tool).
       if [[ $# -eq 1 ]]; then
         # Bare-name dispatch: hop <name> → cd into the repo.
-        # Repo > tool: with one arg, always treat as repo name even if the
-        # token also happens to be a binary on PATH.
         _hop_dispatch cd "$1"
+      elif [[ "$2" == "-R" ]]; then
+        # Canonical exec form: hop <name> -R <cmd>... → command hop -R <name> <cmd>...
+        # The shim flips the user-facing form to the binary's internal shape
+        # (extractDashR scans for -R followed by <name> followed by <cmd>...).
+        command hop -R "$1" "${@:3}"
       else
-        # Tool-form: hop <tool> <repo> [args...]. Leading-slash check on
-        # the command -v output filters builtins/keywords (which return bare
-        # names) and missing binaries (empty result). $2 must not be a flag.
-        local _hop_tool_path
-        _hop_tool_path="$(command -v "$1" 2>/dev/null)"
-        if [[ "$2" != -* ]] && [[ "$_hop_tool_path" == /* ]]; then
-          # Binary's -R resolves the repo (match or fzf-prompt) and execs
-          # $1 with cwd = repo dir.
-          command hop -R "$2" "$1" "${@:3}"
-        elif [[ "$2" != -* ]] && [[ -n "$_hop_tool_path" ]]; then
-          # $1 has a command -v entry but no leading slash — it's a shell
-          # builtin, keyword, alias, or function (not a binary on PATH).
-          # Tool-form would silently invoke a different thing (or fail) so
-          # we stop and explain. Use the shell type builtin to label what
-          # kind of name it actually is — shells word it slightly
-          # differently (zsh: "shell builtin"/"reserved word"/"alias for"/
-          # "shell function"; bash: "shell builtin"/"shell keyword"/
-          # "function") but the first line of type output is descriptive
-          # enough either way.
-          local _hop_kind
-          _hop_kind="$(type "$1" 2>&1 | head -1)"
-          if [[ -z "$_hop_kind" ]]; then
-            _hop_kind="$1 is a shell name (alias, function, builtin, or keyword)"
-          fi
-          printf "hop: %s — not a binary, so it can't run as a tool inside a repo.\n" "$_hop_kind" >&2
-          printf "  - To get the path: hop where %s\n" "$2" >&2
-          printf "  - To run a binary by that name: hop -R %s /full/path/to/%s\n" "$2" "$1" >&2
-          return 1
-        elif [[ "$2" != -* ]] && [[ -z "$_hop_tool_path" ]]; then
-          # $1 is not on PATH and not a builtin — likely a tool-form typo.
-          # The fall-through to the binary would surface cobra's terse
-          # "accepts at most 1 arg(s)" error; this is more helpful.
-          printf "hop: '%s' is not a known subcommand or a binary on PATH.\n" "$1" >&2
-          printf "  - If you meant tool-form: install '%s' or check the spelling.\n" "$1" >&2
-          printf "  - If you meant the path of '%s': hop where %s\n" "$1" "$1" >&2
-          return 1
-        else
-          # $2 is a flag — let the binary surface the error.
-          command hop "$@"
-        fi
+        # Tool-form sugar: hop <name> <tool> [args...] → command hop -R <name> <tool> [args...]
+        # Missing tools surface via the binary's "hop: -R: '<cmd>' not found." error.
+        command hop -R "$1" "$2" "${@:3}"
       fi
       ;;
   esac

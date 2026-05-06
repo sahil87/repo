@@ -56,10 +56,10 @@ func TestCompletionReturnsAllNamesForShellFiltering(t *testing.T) {
 func TestCompletionForSubcommands(t *testing.T) {
 	writeReposFixture(t, completionYAML)
 
-	// where, cd, open, clone all share completeRepoNames; verify each surfaces
+	// where, cd, clone all share completeRepoNames; verify each surfaces
 	// repo names. clone uses completeCloneArg, which delegates to
 	// completeRepoNames for non-URL prefixes.
-	for _, sub := range []string{"where", "cd", "open", "clone"} {
+	for _, sub := range []string{"where", "cd", "clone"} {
 		stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, sub, "")
 		if err != nil {
 			t.Fatalf("__complete %s: %v", sub, err)

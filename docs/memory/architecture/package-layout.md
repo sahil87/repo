@@ -12,7 +12,7 @@ src/
 │   ├── main.go                   # entrypoint + translateExit + extractDashR + runDashR
 │   ├── root.go                   # newRootCmd, rootLong help text, AddCommand wiring
 │   ├── where.go                  # newWhereCmd + shared loadRepos/resolveOne/resolveByName/buildPickerLines (was path.go)
-│   ├── open.go, cd.go            # one file per subcommand
+│   ├── cd.go                     # one file per subcommand
 │   ├── clone.go, ls.go
 │   ├── shell_init.go             # posixInit (shared zsh+bash) + cobra GenZshCompletion / GenBashCompletionV2 at runtime
 │   ├── config.go                 # config + nested init/where subcommands
@@ -39,14 +39,9 @@ src/
     ├── proc/                     # centralized exec.CommandContext
     │   ├── proc.go               # Run, RunInteractive, RunForeground, ExitCode, ErrNotFound
     │   └── proc_test.go
-    ├── update/                   # self-update via Homebrew
-    │   ├── update.go             # Run(version), brew detect/index/info/upgrade
-    │   └── update_test.go
-    └── platform/                 # OS abstraction with build tags
-        ├── platform.go           # package doc only
-        ├── open_darwin.go        # //go:build darwin
-        ├── open_linux.go         # //go:build linux
-        └── platform_test.go
+    └── update/                   # self-update via Homebrew
+        ├── update.go             # Run(version), brew detect/index/info/upgrade
+        └── update_test.go
 ```
 
 ## Conventions
@@ -64,7 +59,7 @@ src/
 
 ## Cobra wiring
 
-Each subcommand is exposed via a `func newXxxCmd() *cobra.Command` factory in its own file. `root.go::newRootCmd()` constructs the root and calls `AddCommand(newWhereCmd(), newOpenCmd(), …)`. `main.go::main()`:
+Each subcommand is exposed via a `func newXxxCmd() *cobra.Command` factory in its own file. `root.go::newRootCmd()` constructs the root and calls `AddCommand(newWhereCmd(), newCdCmd(), newCloneCmd(), newLsCmd(), newShellInitCmd(), newConfigCmd(), newUpdateCmd())`. `main.go::main()`:
 
 1. Builds `rootCmd := newRootCmd()`.
 2. Sets `rootCmd.Version = version` (the package-level `var version = "dev"`, overridden via `-ldflags "-X main.version=…"` at build time — see [build/local](../build/local.md)).
@@ -95,5 +90,5 @@ Errors are wrapped fmt.Errorf strings; missing-group is additionally wrapped via
 
 ## Cross-references
 
-- Wrapper boundaries (`internal/proc`, `internal/fzf`, `internal/platform` build tags, `internal/yamled` separation): [wrapper-boundaries](wrapper-boundaries.md)
+- Wrapper boundaries (`internal/proc`, `internal/fzf`, `internal/yamled` separation): [wrapper-boundaries](wrapper-boundaries.md)
 - Build pipeline: [build/local](../build/local.md)

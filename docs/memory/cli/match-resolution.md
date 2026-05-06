@@ -1,11 +1,11 @@
 # Match Resolution
 
-Algorithm shared by every subcommand that takes a `<name>` argument (`hop`, `hop where`, `hop open`, `hop cd`, `hop clone`, `hop -R`). Implemented in `src/cmd/hop/where.go::resolveByName` and `src/internal/repos/repos.go::MatchOne`.
+Algorithm shared by every subcommand that takes a `<name>` argument (`hop`, `hop where`, `hop cd`, `hop clone`, `hop -R`). Implemented in `src/cmd/hop/where.go::resolveByName` and `src/internal/repos/repos.go::MatchOne`.
 
 ## Algorithm
 
 1. `loadRepos()` reads `hop.yaml` (via `config.Resolve` → `config.Load` → `repos.FromConfig`) and returns the full `Repos` list, in YAML source order (groups in `cfg.Groups` order, URLs within each group in source order — yaml.v3 `yaml.Node` round-trip preserves this).
-2. If `query == ""` → skip step 3 and go straight to fzf with the full list (no `--query` flag). This handles bare `hop`, `hop open`, etc.
+2. If `query == ""` → skip step 3 and go straight to fzf with the full list (no `--query` flag). This handles bare `hop`, `hop clone` (no name), etc.
 3. If `query != ""` → filter via `Repos.MatchOne(query)`: case-insensitive substring on `Name` only (not Path, not URL).
    - Exactly **1 match** → return it directly. Fzf is **not** invoked. (This is the path that works without fzf installed.)
    - 0 or 2+ matches → fall through to fzf.
