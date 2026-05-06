@@ -243,9 +243,9 @@ There is no platform-specific Go code: cross-platform divergence (e.g., Darwin's
 
 Per Constitution Principle I ("Security First"):
 
-1. **All subprocess invocations go through `internal/proc`.** No production package outside `internal/proc/` MAY import `os/exec` directly. Verifiable: `grep --include='*.go' --exclude='*_test.go' -rn '"os/exec"' src/cmd src/internal/{config,repos,fzf,yamled}` returns nothing.
+1. **All subprocess invocations go through `internal/proc`.** No production package outside `internal/proc/` MAY import `os/exec` directly. Verifiable: `grep --include='*.go' --exclude='*_test.go' -rn '"os/exec"' src/cmd src/internal/{config,repos,fzf,update,yamled}` returns nothing.
 2. **All `proc.Run`/`proc.RunInteractive`/`proc.RunForeground` calls use `exec.CommandContext` with explicit argument slices.** Never shell strings, never `exec.Command`. Verifiable: `grep --include='*.go' --exclude='*_test.go' -rn 'exec\.Command\b' src/` returns zero hits.
-3. **User input is validated (or passed as a single argv element) before reaching subprocess.** Repo names from `hop.yaml` are extracted via URL-basename split (no shell metachars survive). Search queries from CLI args are passed to fzf via stdin (the candidate list) and `--query <q>` (a single arg), eliminating shell-injection paths. The `-C` child argv is forwarded as a slice to `proc.RunForeground`, never concatenated into a string.
+3. **User input is validated (or passed as a single argv element) before reaching subprocess.** Repo names from `hop.yaml` are extracted via URL-basename split (no shell metachars survive). Search queries from CLI args are passed to fzf via stdin (the candidate list) and `--query <q>` (a single arg), eliminating shell-injection paths. The `-R` child argv is forwarded as a slice to `proc.RunForeground`, never concatenated into a string.
 4. **Atomic file writes for config edits.** `internal/yamled.AppendURL` writes to a temp file in the same directory and `os.Rename`s into place — preserving the original on rename failure.
 
 > **GIVEN** a repo URL `git@github.com:user/hop;ls.git`

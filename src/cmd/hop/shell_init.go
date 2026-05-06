@@ -11,7 +11,7 @@ import (
 // Both shells understand `[[ ]]`, `${@:2}` slicing, and `local`. The completion
 // suffix (cobra-generated zsh or bash completion) is appended per-shell at the end.
 //
-// Resolution order in the hop() function (4-step ladder):
+// Resolution order in the hop() function (5-step ladder):
 //
 //  1. No args                                           → bare picker
 //  2. $1 is __complete*                                 → forward to binary (cobra completion)

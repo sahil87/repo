@@ -59,23 +59,23 @@ func extractDashR(args []string) (target string, child []string, ok bool, err er
 		a := args[i]
 		if a == "-R" {
 			if i+1 >= len(args) {
-				return "", nil, true, fmt.Errorf("hop: -R requires a value. Usage: hop -R <name> <cmd>...")
+				return "", nil, true, fmt.Errorf("hop: -R requires a value. Usage: hop <name> -R <cmd>... (or hop -R <name> <cmd>...)")
 			}
 			target = args[i+1]
 			rest := args[i+2:]
 			if len(rest) == 0 {
-				return target, nil, true, fmt.Errorf("hop: -R requires a command to execute. Usage: hop -R <name> <cmd>...")
+				return target, nil, true, fmt.Errorf("hop: -R requires a command to execute. Usage: hop <name> -R <cmd>... (or hop -R <name> <cmd>...)")
 			}
 			return target, rest, true, nil
 		}
 		if len(a) > 3 && a[:3] == "-R=" {
 			target = a[3:]
 			if target == "" {
-				return "", nil, true, fmt.Errorf("hop: -R requires a value. Usage: hop -R <name> <cmd>...")
+				return "", nil, true, fmt.Errorf("hop: -R requires a value. Usage: hop <name> -R <cmd>... (or hop -R <name> <cmd>...)")
 			}
 			rest := args[i+1:]
 			if len(rest) == 0 {
-				return target, nil, true, fmt.Errorf("hop: -R requires a command to execute. Usage: hop -R <name> <cmd>...")
+				return target, nil, true, fmt.Errorf("hop: -R requires a command to execute. Usage: hop <name> -R <cmd>... (or hop -R <name> <cmd>...)")
 			}
 			return target, rest, true, nil
 		}

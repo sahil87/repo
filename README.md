@@ -67,7 +67,7 @@ hop ls                    # list every repo (name + path)
 h outbox                  # cd into outbox (single-letter alias + bare-name dispatch)
 hop outbox git status     # tool-form: run `git status` inside outbox; cwd unchanged
 hop dotfiles cursor       # tool-form: open dotfiles in cursor
-hop outbox -R git status  # canonical user-facing form (when $2 is also a hop subcommand or flag)
+hop outbox -R git status  # canonical user-facing form (explicit; equivalent to the tool-form above)
 hop -R outbox git status  # binary-direct form (works without the shim, e.g. in scripts)
 hop clone outbox          # registry-driven: clone outbox if it isn't already on disk
 hop clone git@github.com:foo/bar.git
