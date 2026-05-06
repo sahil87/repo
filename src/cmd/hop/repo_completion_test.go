@@ -370,3 +370,51 @@ func TestCompletionToolFormThirdPositionEmpty(t *testing.T) {
 		t.Fatalf("expected no candidates at third position of tool-form, got: %v", got)
 	}
 }
+
+// TestCompletionDashRThirdPositionSubcommandRouted is the regression guard
+// for the case where cobra dispatches the post-`-R <name>` argv to a real
+// subcommand (e.g. `hop -R alpha where <TAB>`). The hidden -R flag MUST be
+// persistent so subcommands can still parse it; the suppression check in
+// completeRepoNames MUST look at the root's flag (cmd.Root().Flag(...)) so
+// the subcommand's invocation observes the Changed bit. Without these,
+// cobra fails to parse `-R` at the subcommand level and falls back to file
+// completion, leaking candidates for the child argv.
+func TestCompletionDashRThirdPositionSubcommandRouted(t *testing.T) {
+	writeReposFixture(t, completionYAML)
+
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "-R", "alpha", "where", "")
+	if err != nil {
+		t.Fatalf("__complete -R alpha where: %v", err)
+	}
+	// `where` is a subcommand whose own ValidArgsFunction is
+	// completeRepoNames. We expect zero candidates — the call originates
+	// past `-R alpha`, the child argv slot. We use candidatesFrom (not
+	// substring search) because `where`'s own completeRepoNames could
+	// otherwise echo all repo names.
+	if got := candidatesFrom(stdout.String()); len(got) > 0 {
+		t.Fatalf("expected no candidates at child argv slot of `-R alpha where`, got: %v", got)
+	}
+}
+
+// TestCompletionSubcommandSecondPositionalEmpty is the regression guard for
+// the case where a non-root subcommand sees a 2nd positional (e.g.
+// `hop where sh <TAB>`). `where` accepts at most 1 positional, so the
+// completion should yield zero candidates. shouldCompleteRepoForSecondArg
+// MUST gate on cmd.Parent() == nil to avoid leaking repo-name candidates
+// into a subcommand's invalid argv slot.
+func TestCompletionSubcommandSecondPositionalEmpty(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skipf("sh not on PATH; skipping: %v", err)
+	}
+	writeReposFixture(t, completionYAML)
+
+	for _, sub := range []string{"where", "open", "cd"} {
+		stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, sub, "sh", "")
+		if err != nil {
+			t.Fatalf("__complete %s sh: %v", sub, err)
+		}
+		if got := candidatesFrom(stdout.String()); len(got) > 0 {
+			t.Fatalf("expected no candidates for `%s sh <TAB>` (subcommand has no 2nd positional), got: %v", sub, got)
+		}
+	}
+}

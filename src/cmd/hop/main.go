@@ -31,11 +31,12 @@ func main() {
 	// portion and the child portion before delegating.
 	//
 	// EXCEPT for cobra's hidden completion entrypoints (`__complete` /
-	// `__completeNoDesc`): those need to reach rootCmd.Execute() so that the
-	// root's ValidArgsFunction (completeRepoNames) can offer repo-name
-	// candidates for the `$2` slot of `hop -R <TAB>`. Without this skip,
-	// extractDashR would intercept `hop __complete -R "" ""` and emit the
-	// malformed-`-R` error before cobra's completion machinery runs.
+	// `__completeNoDesc`): those need to reach rootCmd.Execute() so the
+	// hidden persistent `-R` flag's RegisterFlagCompletionFunc (in
+	// newRootCmd) can offer repo-name candidates for `hop -R <TAB>`.
+	// Without this skip, extractDashR would intercept `hop __complete -R ""`
+	// and emit the malformed-`-R` error before cobra's completion machinery
+	// runs.
 	if !isCompletionInvocation(os.Args) {
 		if target, child, ok, err := extractDashR(os.Args); ok {
 			if err != nil {

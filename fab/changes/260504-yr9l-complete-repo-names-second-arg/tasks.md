@@ -12,19 +12,17 @@
 
 - [x] T001 Add `isCompletionInvocation(args []string) bool` helper to `src/cmd/hop/main.go`. Returns `true` iff `len(args) >= 2 && args[1] in {"__complete", "__completeNoDesc"}`. Place near `extractDashR` with a doc comment explaining its single purpose (suppress `-R` interception during cobra completion).
 - [x] T002 Wire the helper into `src/cmd/hop/main.go::main`: gate the existing `extractDashR(os.Args)` block with `if !isCompletionInvocation(os.Args) { ... }`. Update the inline comment above the gate to explain why completion entrypoints must reach `rootCmd.Execute()`.
-- [x] T003 [P] Add `shouldCompleteRepoForSecondArg(cmd *cobra.Command, args []string) bool` helper to `src/cmd/hop/repo_completion.go`. Returns `true` iff `len(args) == 1` AND (`args[0] == "-R"` OR (`args[0]` is not a known available subcommand of `cmd` AND `exec.LookPath(args[0])` returns an absolute path)). Document the mirror to `shell_init.go` shim rules 4 and 6.
+- [x] T003 [P] Add `shouldCompleteRepoForSecondArg(cmd *cobra.Command, args []string) bool` helper to `src/cmd/hop/repo_completion.go`. Returns `true` iff `len(args) == 1` AND `cmd.Parent() == nil` (root only — subcommands have their own arity) AND `args[0]` is not a known available subcommand of `cmd` AND `exec.LookPath(args[0])` returns an absolute path. Document the mirror to `shell_init.go` shim rules 4 and 6. Note: `-R` completion is wired separately via `cmd.RegisterFlagCompletionFunc` against a hidden persistent `-R` cobra flag in `root.go::newRootCmd` — cobra consumes `-R <value>` before `ValidArgsFunction` runs, so an `args[0] == "-R"` branch is unreachable.
 - [x] T004 Update `completeRepoNames` in `src/cmd/hop/repo_completion.go`: replace the early bail `if len(args) > 0 { return nil, ... }` with `if len(args) > 0 && !shouldCompleteRepoForSecondArg(cmd, args) { return nil, ... }`. Existing logic below (loadRepos, subcommand-collision filter, name accumulation) is unchanged. Add `os/exec` and `path/filepath` imports as needed.
 
 ## Phase 3: Integration & Edge Cases
 
 - [x] T005 [P] Add `src/cmd/hop/main_test.go` with unit tests for `isCompletionInvocation`: returns `true` for `["hop", "__complete", "-R", "", ""]` and `["hop", "__completeNoDesc", "where", ""]`; returns `false` for `["hop", "-R", "name", "ls"]`, `["hop"]`, and `[]` (defensive). Package-private, follows `dashr_test.go` conventions.
-- [x] T006 [P] Extend `src/cmd/hop/repo_completion_test.go` with unit tests for `shouldCompleteRepoForSecondArg` calling the helper directly with `newRootCmd()` as `cmd`:
-  - `args = []` → `false`
-  - `args = ["-R"]` → `true`
+- [x] T006 [P] Extend `src/cmd/hop/repo_completion_test.go` with unit tests for `shouldCompleteRepoForSecondArg` calling the helper directly with `newRootCmd()` as `cmd` (covers tool-form only — `-R` is wired via flag-completion and tested end-to-end in T007):
+  - `args = []` → `false` (length != 1)
   - `args = ["sh"]` → `true` (assumes `sh` is on PATH; skip with `t.Skip` if `exec.LookPath("sh")` fails)
   - `args = ["hop-nonexistent-tool-xyzzy"]` → `false` (defensive guard against accidental PATH presence: skip with `t.Skip` if it resolves)
   - `args = ["clone"]` → `false` (subcommand wins; verifies subcommand check uses cobra introspection)
-  - `args = ["-R", "name"]` → `false` (length != 1)
   - `args = ["sh", "name"]` → `false` (length != 1)
 - [x] T007 [P] Extend `src/cmd/hop/repo_completion_test.go` with end-to-end completion tests using `cobra.ShellCompRequestCmd` (matches existing pattern at lines 22-35):
   - `runArgs(t, cobra.ShellCompRequestCmd, "-R", "")` → stdout contains all repo names from fixture

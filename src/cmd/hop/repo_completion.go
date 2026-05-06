@@ -30,8 +30,9 @@ import (
 // `hop -R <name> <TAB>` (third position of -R form): cobra consumes
 // `-R <name>` as a flag pair, so this function is invoked with args=[]
 // and would otherwise look like a bare `hop <TAB>`. We detect this case via
-// the root cmd's `R` flag's Changed bit and suppress candidates — the
-// remaining argv is the child command's, not hop's.
+// the root cmd's R-flag Changed bit and suppress candidates. The flag is
+// persistent on root so subcommand-routed completions (e.g. `hop -R name
+// where <TAB>`) can also observe it through cmd.Root().
 //
 // On hop.yaml load failure we return ShellCompDirectiveNoFileComp with no
 // candidates rather than ShellCompDirectiveError, so a missing config doesn't
@@ -40,10 +41,12 @@ func completeRepoNames(cmd *cobra.Command, args []string, _ string) ([]string, c
 	if len(args) > 0 && !shouldCompleteRepoForSecondArg(cmd, args) {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	if rFlag := cmd.Flag("R"); rFlag != nil && rFlag.Changed {
+	if rFlag := cmd.Root().Flag("completion-only-r"); rFlag != nil && rFlag.Changed {
 		// We're past `-R <name>` — at the child argv position. Cobra
 		// already absorbed `-R name` from args, so args looks empty,
-		// but the flag's Changed bit reveals the true context.
+		// but the flag's Changed bit reveals the true context. Look up
+		// on the root because cmd may be a subcommand (e.g.
+		// `hop -R name where <TAB>` routes to `where`'s completion).
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	rs, err := loadRepos()
@@ -115,17 +118,34 @@ func completeCloneArg(cmd *cobra.Command, args []string, toComplete string) ([]s
 //
 // `hop -R <TAB>` is NOT handled here — cobra's flag parser consumes `-R` and
 // its value before ValidArgsFunction runs, so completion for the `-R` value
-// slot is wired via cmd.RegisterFlagCompletionFunc("R", completeRepoNamesForFlag)
-// in newRootCmd instead.
+// slot is wired via cmd.RegisterFlagCompletionFunc on the persistent
+// "completion-only-r" flag in newRootCmd instead.
+//
+// Tool-form is a root-level shape only — subcommands like `hop where sh
+// <TAB>` must NOT advertise repo names because `where` takes a single
+// positional. We gate on cmd.Parent() == nil to ensure the fallthrough only
+// fires for the root command.
 //
 // Returns false for any other shape: len(args) != 1 (positions 3+ belong to
-// the child argv), known subcommands, and binaries that aren't on PATH.
+// the child argv), non-root commands, known subcommands of root, and
+// binaries that aren't on PATH.
 //
 // filepath.IsAbs on exec.LookPath's result is defensive — exec.LookPath
 // returns absolute paths on POSIX systems — but documents intent and mirrors
 // the shim's leading-slash filter that excludes builtins/keywords/aliases.
+//
+// Caveat: exec.LookPath cannot detect shell builtins/aliases/functions, so a
+// builtin like `pwd` whose absolute-path form (`/bin/pwd`) is also on PATH
+// will pass this gate even though the shim's rule 7 would later refuse the
+// dispatch. The mismatch is bounded — the shim emits a clear "shell builtin"
+// error instead of running the binary. A full POSIX-equivalent gate would
+// require shelling out to `command -v` (with shell-injection considerations);
+// deferred as future work if the gap proves user-visible.
 func shouldCompleteRepoForSecondArg(cmd *cobra.Command, args []string) bool {
 	if len(args) != 1 {
+		return false
+	}
+	if cmd.Parent() != nil {
 		return false
 	}
 	first := args[0]

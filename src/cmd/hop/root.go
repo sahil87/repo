@@ -60,17 +60,29 @@ func newRootCmd() *cobra.Command {
 		},
 	}
 
-	// Register `-R` as a hidden string flag purely so cobra's completion
-	// machinery can flag-complete its value slot. In normal execution
-	// `extractDashR` (main.go) intercepts `-R` before cobra ever parses
-	// argv, so this flag is dormant — it never holds a real value. During
-	// `__complete -R <TAB>`, main skips extractDashR and cobra parses
+	// Register `-R` as a hidden persistent string flag purely so cobra's
+	// completion machinery can flag-complete its value slot. In normal
+	// execution `extractDashR` (main.go) intercepts `-R` before cobra ever
+	// parses argv, so this flag is dormant — it never holds a real value.
+	// During `__complete -R <TAB>`, main skips extractDashR and cobra parses
 	// `-R`; without the registration, cobra's parser would fail on the
-	// unknown shorthand and abort completion. The completion func returns
-	// repo names — same source as the bare-form `$1` completion.
-	cmd.Flags().StringP("R", "R", "", "")
-	_ = cmd.Flags().MarkHidden("R")
-	_ = cmd.RegisterFlagCompletionFunc("R", completeRepoNamesForFlag)
+	// unknown shorthand and abort completion.
+	//
+	// Persistent (not local): subcommands like `where`/`open`/`cd` inherit
+	// the flag so cobra can parse `__complete -R <name> <subcmd> ...` after
+	// dispatching to the subcommand. Without persistence, completion routes
+	// like `hop -R alpha where <TAB>` fail to parse the flag at the
+	// subcommand level.
+	//
+	// Long name "completion-only-r" is deliberately non-user-guessable so
+	// `hop --completion-only-r foo` doesn't become a silent-no-op
+	// alternative spelling for `-R` (extractDashR only matches `-R`/`-R=`,
+	// not the long form). Cobra requires a long name for StringP; this
+	// minimizes surface change versus the previous `--R` long-form that
+	// auto-shipped with shorthand-only registration.
+	cmd.PersistentFlags().StringP("completion-only-r", "R", "", "")
+	_ = cmd.PersistentFlags().MarkHidden("completion-only-r")
+	_ = cmd.RegisterFlagCompletionFunc("completion-only-r", completeRepoNamesForFlag)
 
 	cmd.AddCommand(
 		newWhereCmd(),
