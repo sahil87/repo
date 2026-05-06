@@ -2,7 +2,7 @@
 
 > Part of [@sahil87's open source toolkit](https://ai.shll.in) — see all projects there.
 
-A small Go CLI for locating, opening, and operating on git repositories listed in `hop.yaml`. The dominant use case is navigation: `hop <name>` prints a path; `h <name>` (the single-letter alias) `cd`s your shell into that repo via the bare-name dispatcher. To run a command inside a repo without changing your cwd, the binary supports `hop -R <name> <cmd>...`; once you've installed the shell integration (`eval "$(hop shell-init zsh)"` or `bash`), the friendlier `hop <tool> <name> [args...]` form (e.g. `hop cursor dotfiles`) becomes available — it's a shim-side rewrite to `hop -R`, so it does not work when invoking the binary directly from a script.
+A small Go CLI for locating, opening, and operating on git repositories listed in `hop.yaml`. The dominant use case is navigation: `hop <name>` prints a path; `h <name>` (the single-letter alias) `cd`s your shell into that repo via the bare-name dispatcher. To run a command inside a repo without changing your cwd, the binary supports `hop -R <name> <cmd>...`; once you've installed the shell integration (`eval "$(hop shell-init zsh)"` or `bash`), the friendlier `hop <name> <tool> [args...]` form (e.g. `hop dotfiles cursor`) becomes available — it's a shim-side rewrite to `hop -R`, so it does not work when invoking the binary directly from a script.
 
 ## Install
 
@@ -38,7 +38,7 @@ Builds the binary and copies it to `~/.local/bin/hop`. Make sure that directory 
 
 ## Shell integration
 
-For the shell integration (bare-name `cd`, the `hop <tool> <name>` sugar, the `h` and `hi` aliases, and tab completion):
+For the shell integration (bare-name `cd`, the `hop <name> <tool>` sugar, the `h` and `hi` aliases, and tab completion):
 
 ```sh
 eval "$(hop shell-init zsh)"   # zsh
@@ -65,9 +65,10 @@ hop                       # fzf picker over all repos; prints selection's path
 hop where outbox          # resolve "outbox" to its absolute path
 hop ls                    # list every repo (name + path)
 h outbox                  # cd into outbox (single-letter alias + bare-name dispatch)
-hop git outbox status     # tool-form: run `git status` inside outbox; cwd unchanged
-hop cursor dotfiles       # tool-form: open dotfiles in cursor
-hop -R outbox git status  # explicit form (works without the shim, e.g. in scripts)
+hop outbox git status     # tool-form: run `git status` inside outbox; cwd unchanged
+hop dotfiles cursor       # tool-form: open dotfiles in cursor
+hop outbox -R git status  # canonical user-facing form (explicit; equivalent to the tool-form above)
+hop -R outbox git status  # binary-direct form (works without the shim, e.g. in scripts)
 hop clone outbox          # registry-driven: clone outbox if it isn't already on disk
 hop clone git@github.com:foo/bar.git
                           # ad-hoc: clone the URL, register it in hop.yaml, cd into it

@@ -1,0 +1,14 @@
+{"action":"enter","driver":"fab-new","event":"stage-transition","stage":"intake","ts":"2026-05-06T08:41:37Z"}
+{"args":"Simplify the hop CLI by flipping to a repo-first grammar: hop \u003cname\u003e \u003ctool\u003e ... replaces hop \u003ctool\u003e \u003cname\u003e ..., and -R becomes hop \u003cname\u003e -R \u003ccmd\u003e... Removes the tool/builtin precedence ladder, deletes the open subcommand and platform package, and lets the binary's grammar collapse to two slots: subcommand or repo.","cmd":"fab-new","event":"command","ts":"2026-05-06T08:41:37Z"}
+{"delta":"+3.2","event":"confidence","score":3.2,"trigger":"calc-score","ts":"2026-05-06T08:44:16Z"}
+{"delta":"+0.0","event":"confidence","score":3.2,"trigger":"calc-score","ts":"2026-05-06T08:44:37Z"}
+{"cmd":"fab-fff","event":"command","ts":"2026-05-06T09:46:33Z"}
+{"delta":"+0.0","event":"confidence","score":3.2,"trigger":"calc-score","ts":"2026-05-06T09:50:24Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"spec","ts":"2026-05-06T09:50:28Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"tasks","ts":"2026-05-06T09:53:37Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"apply","ts":"2026-05-06T09:53:37Z"}
+{"action":"enter","driver":"fab-continue","event":"stage-transition","stage":"review","ts":"2026-05-06T10:02:51Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"hydrate","ts":"2026-05-06T10:08:12Z"}
+{"event":"review","result":"passed","ts":"2026-05-06T10:08:12Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"ship","ts":"2026-05-06T10:12:26Z"}
+{"action":"enter","driver":"git-pr","event":"stage-transition","stage":"review-pr","ts":"2026-05-06T10:15:07Z"}

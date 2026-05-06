@@ -18,7 +18,6 @@ hop/
 │   │       ├── main.go                   # entrypoint + translateExit + extractDashR + runDashR
 │   │       ├── root.go                   # cobra root + version handling + rootLong help text
 │   │       ├── where.go                  # `hop where`, bare `hop <name>`, shared resolver helpers
-│   │       ├── open.go                   # `hop open`
 │   │       ├── cd.go                     # `hop cd` (binary form: prints hint + exit 2)
 │   │       ├── clone.go                  # `hop clone` (single, --all, ad-hoc URL)
 │   │       ├── ls.go                     # `hop ls`
@@ -60,14 +59,9 @@ hop/
 │       ├── proc/
 │       │   ├── proc.go                   # Run, RunInteractive, RunForeground, ExitCode, ErrNotFound
 │       │   └── proc_test.go
-│       ├── update/
-│       │   ├── update.go                 # Run(version) — Homebrew self-update
-│       │   └── update_test.go
-│       └── platform/
-│           ├── platform.go               # package doc only
-│           ├── open_darwin.go            # //go:build darwin
-│           ├── open_linux.go             # //go:build linux
-│           └── platform_test.go
+│       └── update/
+│           ├── update.go                 # Run(version) — Homebrew self-update
+│           └── update_test.go
 ├── scripts/                              # justfile delegates here
 │   ├── build.sh
 │   ├── install.sh
@@ -114,7 +108,6 @@ Cobra command definitions, flag parsing, exit code handling, the `-R` argv split
 | `main.go` | `func main()` — builds rootCmd, sets `Version`, captures `rootForCompletion`, runs `extractDashR` (pre-cobra), calls `Execute()`. Defines `translateExit` (sole stderr/exit path), `extractDashR` (argv splitter for `-R`), `runDashR` (resolve + `proc.RunForeground`), and the typed sentinels (`errSilent`, `errFzfMissing`, `errFzfCancelled`, `errExitCode`). Holds the package-level `var version = "dev"` (overridden via `-ldflags "-X main.version=…"`). |
 | `root.go` | `func newRootCmd() *cobra.Command` — root command with `RunE` for bare-form (no subcommand or single positional). Sets `Version`, `SilenceUsage = true`, `SilenceErrors = true`. Holds `rootLong` (the help-text Usage table and Notes block) and the `AddCommand` wiring. |
 | `where.go` | `func newWhereCmd() *cobra.Command` — `hop where <name>`. Hosts shared helpers: `loadRepos()`, `resolveByName(query)`, `resolveOne(cmd, query)`, `resolveAndPrint(cmd, query)`, `buildPickerLines(rs)`. Also defines `fzfMissingHint`. |
-| `open.go` | `func newOpenCmd() *cobra.Command`. Calls `platform.Open` and formats the missing-tool stderr using `platform.OpenTool()`. |
 | `cd.go` | `func newCdCmd() *cobra.Command` — prints `cdHint` to stderr and returns `errExitCode{code: 2}`. |
 | `clone.go` | `func newCloneCmd() *cobra.Command` — handles three forms: `<name>`, `--all`, `<url>`. URL detection via `looksLikeURL`. Holds `cloneTimeout` (10 minutes), `gitMissingHint`. URL form delegates the YAML write to `internal/yamled.AppendURL`. |
 | `ls.go` | `func newLsCmd() *cobra.Command` — `cobra.NoArgs`. |
@@ -198,19 +191,6 @@ Test files MAY use `os/exec` directly — to spawn the built binary in integrati
 
 Default timeouts: callers MUST construct a `context.Context` with a timeout for non-interactive ops (e.g., 5s for read-only ops, 10 minutes for `git clone`). Interactive operations (fzf) and `-R` use `context.Background()` (no timeout) because the user is at the keyboard or running an arbitrary child.
 
-### `internal/platform`
-
-Cross-platform abstractions, isolated behind build tags.
-
-| Symbol | Signature / purpose |
-|---|---|
-| `func Open(ctx, path string) error` | Opens `path` in the OS file manager. Implementation in `open_darwin.go` (`open <path>`) and `open_linux.go` (`xdg-open <path>`). Both delegate to `internal/proc.Run`. |
-| `func OpenTool() string` | Returns `"open"` (Darwin) or `"xdg-open"` (Linux). Used by `cmd/hop/open.go` to format the missing-tool stderr without knowing which OS it's on. |
-
-`open_darwin.go` starts with `//go:build darwin`; `open_linux.go` starts with `//go:build linux`. Other platforms (Windows) fail at link time — by design (Constitution Cross-Platform Behavior).
-
-`platform.go` declares the package only (no exported symbols; its job is to host the build-tagged files and the package doc).
-
 ## Wrapper Boundaries
 
 Per Constitution Principle IV ("Wrap, Don't Reinvent"):
@@ -219,8 +199,7 @@ Per Constitution Principle IV ("Wrap, Don't Reinvent"):
 |---|---|
 | `git` | Inline `internal/proc.Run("git", "clone", ...)` calls in `cmd/hop/clone.go`. No dedicated `internal/git/` package — premature for two operations (`git clone` for registered names, `git clone` for ad-hoc URLs). |
 | `fzf` | `internal/fzf.Pick` — non-trivial invocation (multiple flags, stdin piping, query prefill), used by 5+ subcommands. Worth one file. |
-| `open` / `xdg-open` | `internal/platform.Open` — wrapped because the choice is platform-specific. |
-| `<cmd>` (for `-R`) | Inline `internal/proc.RunForeground(...)` in `cmd/hop/main.go::runDashR`. The shim's tool-form sugar rewrites to `-R`, so it shares this exec path. |
+| `<cmd>` (for `-R`) | Inline `internal/proc.RunForeground(...)` in `cmd/hop/main.go::runDashR`. The shim's tool-form sugar (`hop <name> <tool>`) and canonical exec form (`hop <name> -R <cmd>`) both rewrite to `-R`, so they share this exec path. Cross-platform `open`/`xdg-open` is the user's responsibility via tool-form. |
 | YAML (read) | `gopkg.in/yaml.v3` directly in `internal/config/config.go`. Not re-wrapped — yaml.v3 already is the wrapper. |
 | YAML (write-back) | `internal/yamled.AppendURL` — wrapped because comment-preserving write requires node-level navigation, atomic temp+rename, and an `ErrGroupNotFound` sentinel. |
 
@@ -233,8 +212,8 @@ The entire git surface is `git clone <url> <dest>` (in single, `--all`, and ad-h
 The grouped-schema rename introduced two primitives that other operations build on:
 
 - **`hop where <name>`** — path resolver. Stdin/stdout-friendly: `cd "$(hop where outbox)"` works as a shell composition. The bare form `hop <name>` does the same thing.
-- **`hop -R <name> <cmd>...`** — exec-in-context. Repo-scoped: run a child command with cwd set to the resolved repo dir, without leaving the parent shell's cwd changed. Spelled `-R` (not `-C` like `git -C` / `make -C`) because hop is **repo-scoped**, not arbitrary-directory-scoped — the resolution path goes through `resolveByName` which only resolves repos in `hop.yaml`.
-- **`hop <tool> <name> [args...]`** — shim-only tool-form sugar. Rewrites to `command hop -R <name> <tool> [args...]`. Lives in `shell_init.go::posixInit`, NOT the binary. See [cli-surface.md](cli-surface.md#hop-tool-name-shim-sugar) for the precedence ladder and collision rules.
+- **`hop <name> -R <cmd>...`** — exec-in-context. Repo-scoped: run a child command with cwd set to the resolved repo dir, without leaving the parent shell's cwd changed. Spelled `-R` (not `-C` like `git -C` / `make -C`) because hop is **repo-scoped**, not arbitrary-directory-scoped — the resolution path goes through `resolveByName` which only resolves repos in `hop.yaml`. Shim-only user-facing form; the shim rewrites to the binary's internal `command hop -R <name> <cmd>...` shape.
+- **`hop <name> <tool> [args...]`** — shim-only tool-form sugar. Rewrites to `command hop -R <name> <tool> [args...]`. Lives in `shell_init.go::posixInit`, NOT the binary. See [cli-surface.md](cli-surface.md#hop-name-tool-shim-sugar) for the resolution ladder.
 
 Future verbs (`sync`, `autosync`, `features`) build on these rather than each one re-implementing path resolution and exec.
 
@@ -248,25 +227,25 @@ Future verbs (`sync`, `autosync`, `features`) build on these rather than each on
 | linux-amd64 | Supported |
 | Windows | Not supported (per Constitution Cross-Platform Behavior section) |
 
-Platform-specific code is isolated to `internal/platform/` via build tags. The rest of the codebase is platform-agnostic. A `go build` on any supported OS picks the right `open_*.go` automatically.
+There is no platform-specific Go code: cross-platform divergence (e.g., Darwin's `open` vs. Linux's `xdg-open`) is handled at the user layer via tool-form (`hop <name> open` on Darwin, `hop <name> xdg-open` on Linux). The rest of the codebase is platform-agnostic.
 
 ### Verification
 
 > **GIVEN** the source tree
 > **WHEN** I run `cd src && GOOS=darwin GOARCH=arm64 go build ./...`
-> **THEN** the build succeeds using only `open_darwin.go`
+> **THEN** the build succeeds
 
 > **GIVEN** the source tree
 > **WHEN** I run `cd src && GOOS=linux GOARCH=amd64 go build ./...`
-> **THEN** the build succeeds using only `open_linux.go`
+> **THEN** the build succeeds
 
 ## Security Boundary
 
 Per Constitution Principle I ("Security First"):
 
-1. **All subprocess invocations go through `internal/proc`.** No production package outside `internal/proc/` MAY import `os/exec` directly. Verifiable: `grep --include='*.go' --exclude='*_test.go' -rn '"os/exec"' src/cmd src/internal/{config,repos,fzf,platform,yamled}` returns nothing.
+1. **All subprocess invocations go through `internal/proc`.** No production package outside `internal/proc/` MAY import `os/exec` directly. Verifiable: `grep --include='*.go' --exclude='*_test.go' -rn '"os/exec"' src/cmd src/internal/{config,repos,fzf,update,yamled}` returns nothing.
 2. **All `proc.Run`/`proc.RunInteractive`/`proc.RunForeground` calls use `exec.CommandContext` with explicit argument slices.** Never shell strings, never `exec.Command`. Verifiable: `grep --include='*.go' --exclude='*_test.go' -rn 'exec\.Command\b' src/` returns zero hits.
-3. **User input is validated (or passed as a single argv element) before reaching subprocess.** Repo names from `hop.yaml` are extracted via URL-basename split (no shell metachars survive). Search queries from CLI args are passed to fzf via stdin (the candidate list) and `--query <q>` (a single arg), eliminating shell-injection paths. The `-C` child argv is forwarded as a slice to `proc.RunForeground`, never concatenated into a string.
+3. **User input is validated (or passed as a single argv element) before reaching subprocess.** Repo names from `hop.yaml` are extracted via URL-basename split (no shell metachars survive). Search queries from CLI args are passed to fzf via stdin (the candidate list) and `--query <q>` (a single arg), eliminating shell-injection paths. The `-R` child argv is forwarded as a slice to `proc.RunForeground`, never concatenated into a string.
 4. **Atomic file writes for config edits.** `internal/yamled.AppendURL` writes to a temp file in the same directory and `os.Rename`s into place — preserving the original on rename failure.
 
 > **GIVEN** a repo URL `git@github.com:user/hop;ls.git`
@@ -278,7 +257,7 @@ Per Constitution Principle I ("Security First"):
 
 1. **`src/` rooted module, not repo root.** Mirrors `fab-kit/src/go/wt` — the convention for sahil87 Go binaries. Reserves repo root for non-Go artifacts (justfile, scripts, docs, GitHub workflows).
 2. **Cobra over hand-rolled dispatch.** Cobra is already a dependency in `wt`, so weight is amortized. The subcommand count plus per-subcommand flags justifies the dep.
-3. **Flat `internal/<pkg>/` layout.** No `internal/cli/`, no nested packages. Each package has one job: config, repos, fzf, proc, platform, yamled.
+3. **Flat `internal/<pkg>/` layout.** No `internal/cli/`, no nested packages. Each package has one job: config, repos, fzf, proc, yamled, update.
 4. **`testdata/` per-package, not centralized.** Idiomatic Go layout — `go test` auto-excludes any `testdata/` from package compilation, and tests load fixtures with simple relative paths.
 5. **`internal/proc/` is the security choke point.** Centralizing exec lets the security audit be a single grep, not a code review of every call site.
 6. **No `internal/git/` package yet.** Two operations (`git clone <name>` and `git clone <url>`) don't justify a package — both are inline `proc.Run("git", "clone", ...)`. Promote later if `fetch`/`pull`/`status` get added.

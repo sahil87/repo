@@ -10,9 +10,8 @@
 | `hop` | (none) | fzf picker over all repos; print selected absolute path on stdout | 0 selected, 130 cancelled |
 | `hop <name>` | `<name>` | Match-or-fzf to a single repo; print absolute path on stdout | 0 selected, 1 no match, 130 cancelled |
 | `hop where <name>` | `<name>` | Identical to `hop <name>` (explicit form). Renamed from v0.0.1's `hop path` for voice-fit with the binary name. | same as above |
-| `hop -R <name> <cmd>...` | global flag + child argv | Resolve `<name>`, then exec `<cmd>...` with `cwd = <resolved-path>` and inherited stdio. Bypasses cobra parsing for `<cmd>...` | child's exit code; 1 if resolution fails; 2 on usage error |
-| `hop <tool> <name> [args...]` | (shim only) | Sugar for `hop -R <name> <tool> [args...]`. Implemented in `hop shell-init` output; the binary itself does not interpret this form. | tool's exit code; 1 if `<tool>` resolves to a builtin/missing or `<name>` fails to resolve |
-| `hop open [<name>]` | optional `<name>` | Resolve; `open <path>` (Darwin) or `xdg-open <path>` (Linux) | 0 opened, 1 resolution failed, 2 unsupported OS |
+| `hop <name> -R <cmd>...` | positional + flag + child argv | Resolve `<name>`, then exec `<cmd>...` with `cwd = <resolved-path>` and inherited stdio. Implemented in the shim, which rewrites to the binary's internal `command hop -R <name> <cmd>...` shape. | child's exit code; 1 if resolution fails; 2 on usage error |
+| `hop <name> <tool> [args...]` | (shim only) | Sugar for `hop <name> -R <tool> [args...]`. Implemented in `hop shell-init` output; the binary itself does not interpret this form. | tool's exit code; 1 if `<tool>` is missing on PATH (via the binary's `-R` error path) or `<name>` fails to resolve |
 | `hop cd <name>` | `<name>` | Binary form: print hint to stderr, exit 2. Shell-function form (after `eval`): cd into the resolved path. | Binary: 2. Shell function: 0 success, 1 no match |
 | `hop clone [<name>] \| --all` | optional `<name>` or `--all` | Clone single (resolved) or all missing repos | 0 success, 1 path conflict, non-zero on git failure |
 | `hop clone <url>` | 1 (URL form, detected by `looksLikeURL`) | Ad-hoc clone with auto-registration. Flags: `--group`, `--no-add`, `--no-cd`, `--name`. | 0 success, 1 missing group / path conflict / git failure |
@@ -28,7 +27,7 @@
 
 ### Match Resolution Algorithm
 
-Used by `hop`, `hop <name>`, `hop where`, `hop -R`, `hop open`, `hop cd`, `hop clone`.
+Used by `hop`, `hop <name>`, `hop where`, `hop -R`, `hop cd`, `hop clone`.
 
 1. Build the list of all known repos from `hop.yaml`. Each entry has `(Name, Group, Dir, URL, Path)`. The list preserves YAML source order (groups in `cfg.Groups` order, URLs within each group in source order).
 2. If `<name>` is non-empty: filter by case-insensitive substring match on `Name` (not Path, not URL, not Group).
@@ -46,7 +45,7 @@ When two or more repos share the same `Name` across different groups, the displa
 
 ### Stdout / stderr Conventions
 
-- **stdout**: resolved absolute paths (`hop`, `hop where`), the `hop ls` table, version string, config path (`hop config where`), shell integration (`hop shell-init <shell>`), help text, "Created <path>" message from `hop config init`, the landed path from `hop clone <url>` (used by the shell shim for cd-on-success).
+- **stdout**: resolved absolute paths (`hop`, `hop where`), the `hop ls` table, version string, config path (`hop config where`), shell integration (`hop shell-init <shell>`), help text, "Created <path>" message from `hop config init`, the landed path from `hop clone <url>` (used by the shell shim for cd-on-success). `hop -R` and the shim's tool-form sugar inherit the child's stdout (no hop-owned output).
 - **stderr**: status messages (`clone: <url> → <path>`, `skip: <reason>`), error messages, hints. The `hop config init` post-write tip also goes to stderr.
 - The `hop cd` binary form's exit-2 hint goes to **stderr**.
 - `hop -R` inherits stdin/stdout/stderr from the parent — the child's output passes through unchanged.
@@ -117,89 +116,84 @@ When two or more repos share the same `Name` across different groups, the displa
 
 `h <name>` (single-letter alias) behaves identically; `hi <name>` bypasses the shim and invokes the binary directly.
 
-#### `hop -R` exec-in-context
+#### `hop <name> -R <cmd>...` exec-in-context
+
+The user-facing canonical form is `hop <name> -R <cmd>...` (repo name first). The shim rewrites this to `command hop -R <name> <cmd>...` before the binary sees it, so the binary's `extractDashR` continues to scan argv for `-R` followed by `<name>` followed by `<cmd>...` (the existing internal shape — see Design Decision below).
 
 > **GIVEN** `hop.yaml` resolves `outbox` to `~/code/sahil87/outbox`
-> **WHEN** I run `hop -R outbox git status`
-> **THEN** `git status` runs with `cwd = ~/code/sahil87/outbox`
+> **WHEN** I run `hop outbox -R git status` (under the shim)
+> **THEN** the shim runs `command hop -R outbox git status`
+> **AND** `git status` runs with `cwd = ~/code/sahil87/outbox`
 > **AND** stdin/stdout/stderr are inherited (interactive prompts work)
 > **AND** the parent shell's cwd is unchanged
 > **AND** exit code matches `git status`'s exit code
 
 > **GIVEN** an arbitrary child command with its own flags
-> **WHEN** I run `hop -R outbox jq '.foo' file.json`
+> **WHEN** I run `hop outbox -R jq '.foo' file.json`
 > **THEN** `<cmd>...` argv is forwarded verbatim — cobra does NOT try to parse `jq`'s flags as `hop` flags
 > **AND** the child receives `jq '.foo' file.json` as its argv
 
 > **GIVEN** `<name>` matches no repo
-> **WHEN** I run `hop -R nope echo hi`
+> **WHEN** I run `hop nope -R echo hi`
 > **THEN** stderr shows the standard match-or-fzf no-candidate behavior
 > **AND** exit code is 1 (resolution failed)
 
 > **GIVEN** `<cmd>` is not on PATH
-> **WHEN** I run `hop -R outbox notarealbinary`
+> **WHEN** I run `hop outbox -R notarealbinary`
 > **THEN** stderr shows `hop: -R: 'notarealbinary' not found.`
 > **AND** exit code is 1
 
-#### `hop <tool> <name>` shim sugar
+> **GIVEN** the user invokes the binary directly without the shim
+> **WHEN** they run `/usr/local/bin/hop -R outbox git status` (binary-internal form)
+> **THEN** `extractDashR` parses correctly (its existing logic — unchanged)
+> **AND** the binary execs `git status` in outbox
 
-The shim emitted by `hop shell-init` recognizes a tool-form: when `$1` is an
-executable on PATH and `$2` is non-flag, it rewrites the call to
-`command hop -R "$2" "$1" "${@:3}"`. The binary itself does NOT interpret this
-form — invoking the binary directly with `hop cursor dotfiles` argv just hits
-cobra's "accepts at most 1 arg" error.
+#### `hop <name> <tool>` shim sugar
 
-Resolution order in the shim's `hop()` function (precedence ladder):
+The shim emitted by `hop shell-init` recognizes a tool-form: when `$1` is non-empty (and is not a known subcommand, flag, or `__complete*`), `$2` is non-empty and not `-R`, and `$# >= 2`, it rewrites the call to `command hop -R "$1" "$2" "${@:3}"`. The binary itself does NOT interpret this form — invoking the binary directly with `hop dotfiles cursor` argv just hits cobra's "accepts at most 1 arg" error.
+
+The grammar is **subcommand xor repo**: the first positional is one or the other — never a tool. The shim does NOT inspect PATH for `$1` or `$2`, and there is no builtin/keyword filtering. Missing tools surface via the binary's `hop: -R: '<cmd>' not found.` error.
+
+Resolution order in the shim's `hop()` function (4-step ladder, first match wins):
 
 1. No args → bare picker (`command hop`).
-2. `$1` is a flag (`-R`, `-h`, `-v`, ...) → `command hop "$@"`.
-3. `$1` is `__complete*` → `command hop "$@"` (cobra's hidden completion entrypoint).
-4. `$1` is a known subcommand (`cd`, `clone`, `where`, `ls`, `open`, `shell-init`, `config`, `update`, `help`, `--help`, `-h`, `--version`, `completion`) → `_hop_dispatch "$@"`. **Subcommand wins over tool**: a binary on PATH named the same as a subcommand can never be reached as tool-form through the shim — the user must spell it as `hop -R <repo> <tool>`. (`help` covers cobra's auto-generated `hop help [subcommand]` form; without it the shim would treat `hop help` as a bare-name `cd` into a repo named "help", or — for `hop help open` — hit the tool-form path.)
-5. `$1` is the only argument → `_hop_dispatch cd "$1"` (bare-name → `cd`). **Repo wins over tool** for the 1-arg form: even if `$1` is also a binary on PATH, the shim treats it as a repo name. With 2+ args there is no competing repo interpretation, so tool-form fires.
-6. `$1` is on PATH (absolute) AND `$2` is non-flag → tool-form: `command hop -R "$2" "$1" "${@:3}"`.
-7. `$1` is a builtin/keyword/alias/function (non-empty `command -v` but no leading slash) AND `$2` is non-flag → cheerful stderr error suggesting `hop where <repo>` and `hop -R <repo> /full/path/to/<tool>`; exit 1.
-8. `$1` is not on PATH at all (empty `command -v`) AND `$2` is non-flag → cheerful stderr error suggesting `hop where <token>`; exit 1.
-9. Otherwise (`$2` is a flag) → `command hop "$@"` (let the binary surface the error).
-
-Steps 7 and 8 exist purely for UX: without them, the calls would fall through to the binary which errors with cobra's terse "accepts at most 1 arg(s)" — useless for the user to debug. The cheerful errors are emitted by the shim, NOT the binary. Direct binary invocations (`/path/to/hop pwd dotfiles`) still hit cobra's terse error.
-
-The PATH check uses `command -v "$1"` and tests that the result begins with `/`. Builtins, keywords, aliases, and shell functions return bare names (e.g. `pwd`, `if`, `cd`) and fail this check — so `hop pwd dotfiles` does NOT fire tool-form (`pwd` is a builtin); it lands in step 7, where the **shim** (not the binary) emits a cheerful stderr error and exits 1. The binary is never invoked. Users wanting to invoke `/bin/pwd` as a tool can spell the absolute path: `hop /bin/pwd dotfiles`.
+2. `$1` is `__complete*` → `command hop "$@"` (cobra's hidden completion entrypoint).
+3. `$1` is a known subcommand (`cd`, `clone`, `where`, `ls`, `shell-init`, `config`, `update`, `help`, `--help`, `-h`, `--version`, `completion`) → `_hop_dispatch "$@"`.
+4. `$1` is a flag (`-R`, `-h`, `-v`, ...) → `command hop "$@"`.
+5. Otherwise (`$1` is treated as a repo name):
+   - `$# == 1` → `_hop_dispatch cd "$1"` (bare-name → `cd`).
+   - `$2 == "-R"` → `command hop -R "$1" "${@:3}"` (canonical exec form, shim-rewritten so the binary's `extractDashR` sees the existing `-R <name> <cmd>...` shape).
+   - Otherwise → `command hop -R "$1" "$2" "${@:3}"` (tool-form sugar).
 
 > **GIVEN** `cursor` is on PATH and `dotfiles` resolves uniquely
-> **WHEN** I run `hop cursor dotfiles` under the shim
+> **WHEN** I run `hop dotfiles cursor` under the shim
 > **THEN** the shim runs `command hop -R dotfiles cursor`
 > **AND** the binary execs `cursor` with `cwd = <dotfiles-path>`
 > **AND** exit code matches `cursor`'s
 
 > **GIVEN** the user has a repo named `cursor` AND `cursor` is also on PATH
 > **WHEN** I run `hop cursor` (1 arg) under the shim
-> **THEN** the shim treats it as bare-name `cd` (step 5) — `cd` into the cursor repo
-> **WHEN** I run `hop cursor dotfiles` (2 args)
-> **THEN** the shim treats it as tool-form (step 6) — runs `cursor` in dotfiles
+> **THEN** the shim treats it as bare-name `cd` (rule 5, `$# == 1`) — `cd` into the cursor repo
+> **WHEN** I run `hop dotfiles cursor` (2 args)
+> **THEN** the shim treats it as tool-form (rule 5, otherwise) — runs `cursor` in dotfiles
 
 > **GIVEN** `ls` is both a known subcommand AND a binary on PATH
 > **WHEN** I run `hop ls outbox` under the shim
-> **THEN** the shim dispatches to the `hop ls` subcommand (step 4 wins over step 6) — cobra rejects the extra `outbox` arg
+> **THEN** the shim dispatches to the `hop ls` subcommand (rule 3 wins over rule 5) — cobra rejects the extra `outbox` arg
 
-> **GIVEN** `pwd` is a shell builtin (`command -v pwd` returns `pwd`, no leading slash)
-> **WHEN** I run `hop pwd dotfiles` under the shim
-> **THEN** the shim writes a cheerful 3-line stderr message:
->   ```
->   hop: 'pwd' is a shell builtin (not a binary), so it can't run as a tool inside a repo.
->     - To get the path: hop where dotfiles
->     - To run a binary by that name: hop -R dotfiles /full/path/to/pwd
->   ```
-> **AND** exits 1 (does NOT call the binary)
+> **GIVEN** `outbox` resolves uniquely
+> **WHEN** I run `hop outbox pwd` under the shim
+> **THEN** the shim runs `command hop -R outbox pwd`
+> **AND** the binary execs `/bin/pwd` (the on-PATH binary, not the shell builtin) with `cwd = <outbox-path>`
+> **AND** stdout is the absolute path of outbox
+> **AND** there is NO cheerful-error escape hatch — the grammar accepts this redundancy intentionally (Design Decision below)
 
-> **GIVEN** `nonexistent` is not on PATH and not a known subcommand
-> **WHEN** I run `hop nonexistent dotfiles` under the shim
-> **THEN** the shim writes a cheerful 3-line stderr message:
->   ```
->   hop: 'nonexistent' is not a known subcommand or a binary on PATH.
->     - If you meant tool-form: install 'nonexistent' or check the spelling.
->     - If you meant the path of 'nonexistent': hop where nonexistent
->   ```
-> **AND** exits 1 (does NOT call the binary)
+> **GIVEN** `outbox` resolves uniquely AND `notarealbinary` is not on PATH
+> **WHEN** I run `hop outbox notarealbinary` under the shim
+> **THEN** the shim runs `command hop -R outbox notarealbinary`
+> **AND** the binary emits `hop: -R: 'notarealbinary' not found.` to stderr
+> **AND** exit code is 1
+> **NOTE**: The shim does not pre-check PATH; missing tools surface via the binary's `-R` error path.
 
 #### `hop clone <name>` (registered repo)
 
@@ -340,14 +334,13 @@ Version comparison MUST normalize the leading `v` — the binary reports version
 
 ### External Tool Availability
 
-External tools (`fzf`, `git`, `code`, `open`, `xdg-open`) are checked **lazily** — only when the subcommand actually needs them. Subcommands that resolve without an external tool MUST NOT preemptively check or fail.
+External tools (`fzf`, `git`, `<cmd>` for `-R`) are checked **lazily** — only when the subcommand actually needs them. Subcommands that resolve without an external tool MUST NOT preemptively check or fail.
 
 | Tool | Required by | Behavior if missing |
 |---|---|---|
-| `fzf` | `hop`, `hop <name>` (when match is ambiguous), `hop where` (ambiguous), `hop -R` (ambiguous), `hop open` (ambiguous), `hop clone <name>` (ambiguous) | Print to stderr: `hop: fzf is not installed. Install it: brew install fzf (macOS) or apt install fzf (Debian).` Exit 1. |
+| `fzf` | `hop`, `hop <name>` (when match is ambiguous), `hop where` (ambiguous), `hop -R` (ambiguous), `hop clone <name>` (ambiguous) | Print to stderr: `hop: fzf is not installed. Install it: brew install fzf (macOS) or apt install fzf (Debian).` Exit 1. |
 | `git` | `hop clone` (any form) | Print to stderr: `hop: git is not installed.` Exit 1. |
-| `open` (Darwin) / `xdg-open` (Linux) | `hop open` | Print to stderr: `hop open: '<tool>' not found.` Exit 1. |
-| `<cmd>` | `hop -R <name> <cmd>...` (and the shim's `hop <tool> <name>` sugar that rewrites to it) | Print to stderr: `hop: -R: '<cmd>' not found.` Exit 1. |
+| `<cmd>` | `hop <name> -R <cmd>...` (and the shim's `hop <name> <tool>` sugar that rewrites to it) | Print to stderr: `hop: -R: '<cmd>' not found.` Exit 1. |
 | `brew` | `hop update` (when installed via brew) | Print to stderr: `hop update: brew not found on PATH.` Exit 1. |
 
 Subcommands that don't need a tool MUST work without it. Examples:
@@ -362,7 +355,7 @@ Subcommands that don't need a tool MUST work without it. Examples:
 
 The `Notes:` block in `rootLong` documents:
 - `hop cd` requires the shell integration; without it, use `cd "$(hop where <name>)"` or `cd "$(hop <name>)"`.
-- The shim's `hop <tool> <name>` tool-form sugar (and that it isn't recognized by the binary directly).
+- The shim's `hop <name> <tool>` and `hop <name> -R <cmd>...` forms run a tool inside a repo. The repo name always comes first. (Not recognized by the binary directly.)
 - Config search order: `$HOP_CONFIG`, then `$XDG_CONFIG_HOME/hop/hop.yaml`, then `$HOME/.config/hop/hop.yaml`.
 - Run `hop config init` to bootstrap.
 
@@ -407,6 +400,6 @@ The `-R` flag bypasses cobra entirely and uses `os.Exit` directly with the child
 7. **`hop clone <url>` infers form from argument shape.** `looksLikeURL` (contains `://` OR (`@` AND `:`)) splits URL form from name form. This keeps `clone` to one verb rather than `clone-url` / `clone-name`. URLs of registered repos still go through name form via `hop clone <name>` — there's no ambiguity because the URL form requires an actual URL shape.
 8. **Auto-registration on `hop clone <url>` is opt-out, not opt-in.** The default behavior for an ad-hoc URL clone is "I want this in my registry"; `--no-add` is the escape valve. This matches the dominant use case (try a new repo → keep it). The YAML write is comment-preserving (via `internal/yamled`) so registration doesn't trash hand-curated comments.
 9. **`hop update` is a top-level subcommand, not `hop config update` or a flag.** Per Constitution Principle VI, new top-level subcommands need explicit justification. Self-update is a binary-state operation, not config-state — it doesn't fit under `config`, and overloading a flag on the root (e.g. `hop --update`) muddles the bare-form's "print path" semantics. It also matches the convention every Homebrew-installed CLI uses (`fab-kit update`, `gh extension upgrade`). The implementation lives in `internal/update` and routes all subprocess invocations through `internal/proc` per Constitution Principle I (no direct `os/exec` outside `internal/proc`).
-10. **`hop <tool> <name>` is shim-only sugar, not a binary parsing rule.** The shim rewrites tool-form to `command hop -R <name> <tool> ...` before delegating to the binary, so the binary's grammar stays the simple "first token is a subcommand or repo name" model. Putting it in the binary would require a maintained reserved-subcommand list (`ls`, `where`, `cd`, ...), a maintained PATH-detection rule, and a precedence ladder for collisions — all permanent surface-area cost in exchange for a UX win that only matters when the user is already inside a shell. Per Constitution Principle VI ("could this be a separate tool?"), the shim is that separate tool. The trade-off: tool-form is unavailable to scripts and CI invocations of the `hop` binary; those use cases use `hop -R <name> <tool>` explicitly.
-11. **`hop code` was removed in favor of `hop code <name>` via tool-form.** Once the shim dispatches `hop <tool> <name>`, a dedicated `code` subcommand is redundant — `hop code dotfiles` (shim) → `command hop -R dotfiles code` → execs `code` with cwd = dotfiles. This removes a top-level subcommand and the `code`-specific install-hint code path. Note: the `code` token is no longer in the shim's known-subcommand case-list, so the shim correctly routes `hop code <repo>` through tool-form rather than dispatching to a (no-longer-existent) subcommand. There is no compatibility shim — this is a clean break, consistent with the v0.x policy of renaming/removing subcommands without aliases.
-12. **Tool-form filters builtins/keywords via leading-slash check on `command -v`.** Builtins (`pwd`, `cd`, `echo`, `[`), keywords (`if`, `for`, `case`), aliases, and shell functions return bare names from `command -v`. Only real binaries return absolute paths. Filtering them out prevents the shim from rewriting `hop pwd dotfiles` into `command hop -R dotfiles pwd` (which would invoke `/bin/pwd` — almost never what the user means and confusingly different from the shell builtin in `cd` semantics). Users who genuinely want `/bin/pwd` as the tool can spell the absolute path: `hop /bin/pwd dotfiles` (the `/*` check passes for absolute paths).
+10. **Grammar is `subcommand` xor `repo`. The first positional is one or the other — never a tool.** This collapses the shim's precedence ladder to a 4-step structure (no PATH inspection of `$1`, no builtin filtering, no cheerful-error escape hatches) and makes tab completion work in the repo slot for free (`completeRepoNames` already runs on `$1`). The user-facing canonical exec form is `hop <name> -R <cmd>...` and tool-form sugar is `hop <name> <tool> [args...]` — both shim-only; the binary itself does NOT interpret these forms. The shim flips, but the binary's `extractDashR` keeps its existing internal shape (`-R <name> <cmd>...`) because the shim rewrites the user-facing form before the binary sees it. The trade-off: scripts and CI invoking the binary directly use `hop -R <name> <cmd>...` explicitly; the user-facing repo-first form is the shell experience.
+11. **`hop open` was removed entirely; no replacement subcommand.** Once tool-form covers the use case generically, the dedicated `open` subcommand is redundant special-casing. Users invoke `hop <name> open` (Darwin) or `hop <name> xdg-open` (Linux) via the shim's tool-form sugar — or `hop <name> -R open` / `hop <name> -R xdg-open` directly. The `internal/platform` package was deleted with the subcommand: its only purpose was to abstract Darwin-vs-Linux for `hop open`. Cross-platform users who need portable scripts write their own one-liner.
+12. **`hop code` was removed in favor of `hop <name> code` via tool-form.** Once the shim dispatches `hop <name> <tool>`, a dedicated `code` subcommand is redundant — `hop dotfiles code` (shim) → `command hop -R dotfiles code` → execs `code` with cwd = dotfiles. This removes a top-level subcommand and the `code`-specific install-hint code path. There is no compatibility shim — this is a clean break, consistent with the v0.x policy of renaming/removing subcommands without aliases.

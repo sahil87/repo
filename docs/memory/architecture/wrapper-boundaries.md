@@ -1,6 +1,6 @@
 # Wrapper Boundaries
 
-How `hop` wraps external tools and isolates platform-specific code. Enforces Constitution Principle I (Security First) and Principle IV (Wrap, Don't Reinvent).
+How `hop` wraps external tools. Enforces Constitution Principle I (Security First) and Principle IV (Wrap, Don't Reinvent).
 
 ## `internal/proc` — the security choke point
 
@@ -67,19 +67,6 @@ Formula name: **`sahil87/tap/hop` (fully qualified)** to dodge a name collision 
 
 Why a dedicated package separate from `internal/config`: `config` validates and consumes; `yamled` produces a node tree, navigates, mutates, writes. Different responsibilities — `config` is the schema validator; `yamled` is a node-level mutator. Either can be tested independently.
 
-## `internal/platform` — OS isolation via build tags
-
-`platform.go` declares the package only (no exported symbols). The two build-tagged files implement `Open`:
-
-- `open_darwin.go` — `//go:build darwin`; calls `proc.Run(ctx, "open", path)`. `OpenTool() string` returns `"open"`.
-- `open_linux.go` — `//go:build linux`; calls `proc.Run(ctx, "xdg-open", path)`. `OpenTool() string` returns `"xdg-open"`.
-
-`OpenTool()` exists so `cmd/hop/open.go` can format the missing-tool stderr (`hop open: 'open' not found.` vs `hop open: 'xdg-open' not found.`) without knowing which OS it's on.
-
-Other platforms (Windows) fail at link time — by design (Constitution Cross-Platform Behavior).
-
-Cross-platform builds verified by `cd src && GOOS=darwin GOARCH=arm64 go build ./...` and `cd src && GOOS=linux GOARCH=amd64 go build ./...` — both succeed.
-
 ## What is NOT wrapped
 
 Per Constitution Principle IV ("Wrap, Don't Reinvent") — wrap external tools, but don't over-package:
@@ -95,7 +82,7 @@ Per Constitution Principle IV ("Wrap, Don't Reinvent") — wrap external tools, 
 The change introduced two primitives that other operations build on:
 
 - **`hop where <name>`** — path resolver. Stdin/stdout-friendly: `cd "$(hop where outbox)"` works as a shell composition.
-- **`hop -R <name> <cmd>...`** — exec-in-context. Repo-scoped: run a child command with cwd set to the resolved repo dir, without leaving the parent shell's cwd changed. The shim's `hop <tool> <name>` sugar rewrites to this.
+- **`hop <name> -R <cmd>...`** — exec-in-context. Repo-scoped: run a child command with cwd set to the resolved repo dir, without leaving the parent shell's cwd changed. The shim's `hop <name> <tool>` tool-form sugar rewrites to this. The shim flips the user-facing form to the binary's internal `hop -R <name> <cmd>...` shape so `extractDashR` (in `cmd/hop/main.go`) is unchanged.
 
 Future verbs (`sync`, `autosync`, `features`) build on these rather than each one re-implementing path resolution and exec.
 

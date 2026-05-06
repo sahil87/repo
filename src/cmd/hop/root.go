@@ -15,7 +15,6 @@ Getting started:
 Usage:
   hop <name>             echo abs path of matching repo
   hop where <name>       same, explicit form
-  hop open <name>        open the repo in the OS file manager (Finder on macOS)
   hop cd <name>          cd into the repo (shell function — needs ` + "`eval \"$(hop shell-init zsh)\"`" + `)
   hop clone <name>       git clone the repo if it isn't already on disk
   hop clone <url>        ad-hoc clone: clone the URL, register it in hop.yaml, print landed path
@@ -25,10 +24,9 @@ Usage:
   hop config init        bootstrap a starter hop.yaml
   hop config where       print the resolved hop.yaml path
   hop update             self-update the hop binary via Homebrew
-  hop -R <name> <cmd>... run <cmd>... with the working directory set to <name>'s repo dir
-  hop <tool> <name>...   shim-only sugar for ` + "`hop -R <name> <tool> ...`" + ` (e.g., ` + "`hop cursor dotfiles`" + `)
+  hop <name> -R <cmd>... run <cmd>... with the working directory set to <name>'s repo dir
+  hop <name> <tool>...   shim-only sugar for ` + "`hop <name> -R <tool> ...`" + ` (e.g., ` + "`hop dotfiles cursor`" + `)
   hop                    fzf picker, print selection
-  hop open               fzf picker, then open in OS file manager
   hop clone              fzf picker, then clone if missing
   hop -h | --help        show this help
   hop -v | --version     print version
@@ -37,8 +35,8 @@ Notes:
   - ` + "`hop cd`" + ` requires the shell integration (a binary can't change its parent shell's cwd).
     Without it, use:  cd "$(hop where <name>)"
   - On ambiguous or no-match queries, fzf opens prefilled with your query.
-  - The ` + "`hop <tool> <name>`" + ` form (e.g. ` + "`hop cursor dotfiles`" + `) is implemented in the shell shim;
-    invoking the binary directly with that argv won't dispatch as tool-form.
+  - The shim's ` + "`hop <name> <tool>`" + ` and ` + "`hop <name> -R <cmd>...`" + ` forms run a tool inside a repo.
+    The repo name always comes first.
   - Config search order: $HOP_CONFIG, then $XDG_CONFIG_HOME/hop/hop.yaml, then $HOME/.config/hop/hop.yaml.`
 
 func newRootCmd() *cobra.Command {
@@ -62,7 +60,6 @@ func newRootCmd() *cobra.Command {
 
 	cmd.AddCommand(
 		newWhereCmd(),
-		newOpenCmd(),
 		newCdCmd(),
 		newCloneCmd(),
 		newLsCmd(),

@@ -1,0 +1,44 @@
+id: koa2
+name: 260506-koa2-flip-to-repo-first-grammar
+created: 2026-05-06T08:41:37Z
+created_by: sahil-weaver
+change_type: refactor
+issues: []
+progress:
+    intake: done
+    spec: done
+    tasks: done
+    apply: done
+    review: done
+    hydrate: done
+    ship: done
+    review-pr: active
+checklist:
+    generated: true
+    path: checklist.md
+    completed: 0
+    total: 46
+confidence:
+    certain: 12
+    confident: 6
+    tentative: 0
+    unresolved: 0
+    score: 3.2
+    fuzzy: true
+    dimensions:
+        signal: 87.5
+        reversibility: 79.7
+        competence: 88.9
+        disambiguation: 88.6
+stage_metrics:
+    intake: {started_at: "2026-05-06T08:41:37Z", driver: fab-new, iterations: 1, completed_at: "2026-05-06T09:50:28Z"}
+    spec: {started_at: "2026-05-06T09:50:28Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-06T09:53:37Z"}
+    tasks: {started_at: "2026-05-06T09:53:37Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-06T09:53:37Z"}
+    apply: {started_at: "2026-05-06T09:53:37Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-06T10:02:51Z"}
+    review: {started_at: "2026-05-06T10:02:51Z", driver: fab-continue, iterations: 1, completed_at: "2026-05-06T10:08:12Z"}
+    hydrate: {started_at: "2026-05-06T10:08:12Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-06T10:12:26Z"}
+    ship: {started_at: "2026-05-06T10:12:26Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-06T10:15:07Z"}
+    review-pr: {started_at: "2026-05-06T10:15:07Z", driver: git-pr, iterations: 1}
+prs:
+    - https://github.com/sahil87/hop/pull/12
+last_updated: 2026-05-06T10:15:07Z
