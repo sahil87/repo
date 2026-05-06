@@ -19,8 +19,8 @@ Match resolution algorithm used by `hop`, `hop where`, `hop open`, `hop cd`, `ho
 | `hop config init` | `config.go` | none | Writes embedded `starter.yaml` to `ResolveWriteTarget()` |
 | `hop config where` | `config.go` | none | Prints `ResolveWriteTarget()` to stdout (never errors on missing file). Renamed from v0.0.1's `config path` for consistency with `hop where` |
 | `hop update` | `update.go` | none | Self-update via Homebrew. Detects brew install via `os.Executable` + `EvalSymlinks` + `/Cellar/` substring; non-brew installs exit 0 with a manual-update hint. Logic lives in `internal/update`; subprocess calls go through `internal/proc` |
-| `hop -R <name> <cmd>...` | `main.go` | global flag + child argv | Resolves `<name>` to a path, then execs `<cmd>...` with `Dir=<path>` and inherited stdio. Implemented via pre-Execute argv inspection in `main.go::extractDashR`; bypasses cobra subcommand parsing for the post-`<name>` argv. Spelled `-R` (not `-C`) because hop is repo-scoped, not directory-scoped |
-| `hop <tool> <name> [args...]` | (shim only) | 2+ args | Sugar for `hop -R <name> <tool> [args...]`. Lives in `shell_init.go::posixInit`, NOT the binary. The binary errors on this argv shape (cobra's max-1-arg root). See [Tool-form dispatch](#tool-form-dispatch) below |
+| `hop -R <name> <cmd>...` | `main.go` | global flag + child argv | Resolves `<name>` to a path, then execs `<cmd>...` with `Dir=<path>` and inherited stdio. Implemented via pre-Execute argv inspection in `main.go::extractDashR`; bypasses cobra subcommand parsing for the post-`<name>` argv. Spelled `-R` (not `-C`) because hop is repo-scoped, not directory-scoped. Tab-completion: `hop -R <TAB>` completes repo names from `hop.yaml` (no subcommand-collision filter — repos named like subcommands are valid `-R` targets); `hop -R <name> <TAB>` returns no candidates (child argv is not hop's). See [Tab completion](#tab-completion) below |
+| `hop <tool> <name> [args...]` | (shim only) | 2+ args | Sugar for `hop -R <name> <tool> [args...]`. Lives in `shell_init.go::posixInit`, NOT the binary. The binary errors on this argv shape (cobra's max-1-arg root). Tab-completion: `hop <tool> <TAB>` completes repo names when `<tool>` is on PATH at an absolute path AND not a known hop subcommand (mirrors shim rules 4 and 6). See [Tool-form dispatch](#tool-form-dispatch) below |
 | `hop -v` / `hop --version` | cobra | — | Auto-wired by cobra when `rootCmd.Version` is set; output is the `var version` value (default `dev`, overridden via `-ldflags "-X main.version=..."`) |
 | `hop help` / `-h` / `--help` | cobra | — | Cobra-rendered help, with `rootLong` providing the `Usage:` table and `Notes:` block from `root.go` |
 
@@ -119,6 +119,20 @@ The cobra-generated completion is appended at runtime — `rootCmd.GenZshComplet
 - bash: `complete -o default -F __start_hop h hi`
 
 so the `h` and `hi` aliases share the same completion logic — without this, tab completion would only work on `hop`, not on the aliases.
+
+### Tab completion
+
+Repo-name candidates fire at three slots, all backed by `repo_completion.go`:
+
+| Argv shape | Hook | Candidates |
+|---|---|---|
+| `hop <TAB>` | root `ValidArgsFunction = completeRepoNames` | repo names from `hop.yaml` minus subcommand-collision names |
+| `hop -R <TAB>` | `cmd.RegisterFlagCompletionFunc("R", completeRepoNamesForFlag)` against a hidden `-R` cobra flag (`StringP("R","R","","")` + `MarkHidden("R")` in `root.go::newRootCmd`) | all repo names — no collision filter, since `-R` routed via the flag, not the subcommand dispatcher |
+| `hop <tool> <TAB>` | `completeRepoNames` falls through when `shouldCompleteRepoForSecondArg(cmd, args)` is true: `len(args)==1`, `args[0]` is not an available subcommand of `cmd`, and `exec.LookPath(args[0])` returns an absolute path (mirrors shim rules 4 and 6) | all repo names |
+
+Position-3+ slots return no candidates: `hop -R <name> <TAB>` is detected via `cmd.Flag("R").Changed` in `completeRepoNames` (cobra has already absorbed `-R <name>`, so `args=[]` looks like bare `hop <TAB>` without this check); `hop <tool> <name> <TAB>` falls out via the `len(args) != 1` guard in `shouldCompleteRepoForSecondArg`.
+
+For `hop -R <TAB>` to reach cobra's machinery, `main.go::main` skips `extractDashR` when `os.Args[1]` is `__complete` or `__completeNoDesc` (see `isCompletionInvocation` in [architecture/package-layout](../architecture/package-layout.md#cobra-wiring)). The `-R` cobra flag is dormant in normal execution — `extractDashR` consumes `-R` from `os.Args` before `Execute()` runs.
 
 ## Tool-form dispatch
 

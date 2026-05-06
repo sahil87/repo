@@ -60,6 +60,18 @@ func newRootCmd() *cobra.Command {
 		},
 	}
 
+	// Register `-R` as a hidden string flag purely so cobra's completion
+	// machinery can flag-complete its value slot. In normal execution
+	// `extractDashR` (main.go) intercepts `-R` before cobra ever parses
+	// argv, so this flag is dormant — it never holds a real value. During
+	// `__complete -R <TAB>`, main skips extractDashR and cobra parses
+	// `-R`; without the registration, cobra's parser would fail on the
+	// unknown shorthand and abort completion. The completion func returns
+	// repo names — same source as the bare-form `$1` completion.
+	cmd.Flags().StringP("R", "R", "", "")
+	_ = cmd.Flags().MarkHidden("R")
+	_ = cmd.RegisterFlagCompletionFunc("R", completeRepoNamesForFlag)
+
 	cmd.AddCommand(
 		newWhereCmd(),
 		newOpenCmd(),

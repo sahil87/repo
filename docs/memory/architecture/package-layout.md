@@ -9,7 +9,8 @@ src/
 ├── go.mod                        # module github.com/sahil87/hop, go 1.22
 ├── go.sum
 ├── cmd/hop/                      # one cobra entrypoint (renamed from cmd/repo/)
-│   ├── main.go                   # entrypoint + translateExit + extractDashR + runDashR
+│   ├── main.go                   # entrypoint + translateExit + extractDashR + runDashR + isCompletionInvocation
+│   ├── repo_completion.go        # completeRepoNames + completeRepoNamesForFlag + shouldCompleteRepoForSecondArg
 │   ├── root.go                   # newRootCmd, rootLong help text, AddCommand wiring
 │   ├── where.go                  # newWhereCmd + shared loadRepos/resolveOne/resolveByName/buildPickerLines (was path.go)
 │   ├── open.go, cd.go            # one file per subcommand
@@ -69,10 +70,12 @@ Each subcommand is exposed via a `func newXxxCmd() *cobra.Command` factory in it
 1. Builds `rootCmd := newRootCmd()`.
 2. Sets `rootCmd.Version = version` (the package-level `var version = "dev"`, overridden via `-ldflags "-X main.version=…"` at build time — see [build/local](../build/local.md)).
 3. Sets `rootForCompletion = rootCmd` (a package-level var used by `shell-init` to call `GenZshCompletion` / `GenBashCompletionV2` without threading rootCmd through the factory).
-4. Inspects `os.Args` for `-R` via `extractDashR`; if present, resolves the target via `resolveByName` and execs the child via `proc.RunForeground` with `os.Exit(code)` — bypassing cobra entirely.
+4. Inspects `os.Args` for `-R` via `extractDashR`; if present, resolves the target via `resolveByName` and execs the child via `proc.RunForeground` with `os.Exit(code)` — bypassing cobra entirely. The `extractDashR` call is gated behind `!isCompletionInvocation(os.Args)` (helper in `main.go`, true iff `len(os.Args) >= 2 && os.Args[1] in {"__complete", "__completeNoDesc"}`) so cobra's hidden completion entrypoints reach `Execute()` instead of being intercepted — without the skip, `hop __complete -R "" ""` would emit `extractDashR`'s malformed-`-R` error before tab-completion could run.
 5. Otherwise calls `rootCmd.Execute()`. Errors are mapped to exit codes via `translateExit`.
 
 `rootCmd` sets `SilenceUsage = true` and `SilenceErrors = true` so we control all stderr/exit emission via `translateExit`. Bare-form (`hop` or `hop <name>`) is implemented by `RunE` checking `len(args)` and dispatching to the same `resolveAndPrint` helper used by `hop where`.
+
+`newRootCmd` also registers `-R` as a hidden cobra `StringP` flag and pairs it with `cmd.RegisterFlagCompletionFunc("R", completeRepoNamesForFlag)` (from `repo_completion.go`). The flag is dormant in normal execution — `extractDashR` consumes `-R` from `os.Args` before cobra parses it — and `MarkHidden("R")` keeps it out of `--help`. It exists purely as a cobra-side hook so the parser accepts `-R` during `__complete` and dispatches to the flag-value completion func that returns repo-name candidates for `hop -R <TAB>`. See [cli/subcommands](../cli/subcommands.md#tab-completion) for the completion wiring at all three slots.
 
 ### Why pre-Execute argv inspection for `-R`
 

@@ -219,11 +219,24 @@ Two memory files need a sentence each on the new completion behavior:
 | 1 | Certain | Scope is repo-name completion in `$2` of `-R` and tool-form only — no new flags, no completion of child commands, no completion of `-R=<name>` glued form (unless trivially adopted) | Discussed in /fab-discuss session — user explicitly framed scope as "repo names tab completion in both $1 and $2 (in the 2-argument form)" | S:90 R:85 A:90 D:90 |
 | 2 | Certain | The `len(args) > 0` early bail in `completeRepoNames` is the cause of the tool-form gap | Verified by reading the code (repo_completion.go:23-25) and probing the binary (`hop __complete cursor ""` returns directive 4 with no candidates) | S:95 R:85 A:95 D:95 |
 | 3 | Certain | `extractDashR` in `main.go` short-circuits `-R` completion before cobra sees it | Verified by probing: `hop __complete -R "" ""` returns the malformed-`-R` error from `extractDashR`, never reaching cobra | S:95 R:80 A:95 D:95 |
-| 4 | Confident | Tool-form completion gates on `exec.LookPath` returning an absolute path AND `args[0]` not being a known root subcommand, mirroring shim rules 4 and 6 | The shim's logic (shell_init.go:48 subcommand list and shell_init.go:65-66 leading-slash check) is the authoritative model — completion should mirror it so suggestions match what the shim will actually dispatch as tool-form | S:80 R:75 A:85 D:80 |
-| 5 | Confident | `-R` completion triggers when `args == ["-R"]` only — not for `args == ["-R", "name"]` (that's the child command's argv, not a repo slot) | Matches the documented `-R` shape (`hop -R <name> <cmd>...`) — only the `<name>` slot takes a repo name | S:85 R:80 A:85 D:85 |
-| 6 | Confident | The `main.go` change is gated on `args[1] in {"__complete", "__completeNoDesc"}` — cobra's two completion entrypoints | These are the only entrypoints the cobra-generated completion script invokes; the shim's `__complete*` glob covers both | S:80 R:80 A:85 D:85 |
-| 7 | Tentative | Tests use `sh` as the "tool exists" fixture and a fake name as "tool missing" — `ls` is unusable because it's a hop subcommand | `sh` is POSIX-guaranteed on darwin and linux runners; the choice is plausible but other binaries (`true`, `cat`) would also work | S:55 R:80 A:75 D:60 | <!-- assumed: test fixture choice — `sh` is convenient but spec stage may pick differently -->
-| 8 | Confident | Memory updates touch `cli/subcommands.md` (extend completion section) and `architecture/package-layout.md` (note `__complete` skip near existing `extractDashR` description) | Verified by grep against `docs/memory/`: `extractDashR`/`__complete` mentioned in `architecture/package-layout.md` lines 12/20/72/79 and `cli/subcommands.md` completion section ~line 117. No other memory files surface these symbols | S:80 R:75 A:85 D:80 |
-| 9 | Confident | Constitution compliance: §V "Wrap, Don't Reinvent" (use cobra's completion hooks) and §VI "Minimal Surface Area" (no new flags/subcommands) — both satisfied | The change adds no new user-visible surface; it extends the behavior of an existing completion hook | S:80 R:85 A:85 D:80 |
+| 4 | Certain | Tool-form completion gates on `exec.LookPath` returning an absolute path AND `args[0]` not being a known root subcommand, mirroring shim rules 4 and 6 | Clarified — user confirmed | S:95 R:75 A:85 D:80 |
+| 5 | Certain | `-R` completion triggers when `args == ["-R"]` only — not for `args == ["-R", "name"]` (that's the child command's argv, not a repo slot) | Clarified — user confirmed | S:95 R:80 A:85 D:85 |
+| 6 | Certain | The `main.go` change is gated on `args[1] in {"__complete", "__completeNoDesc"}` — cobra's two completion entrypoints | Clarified — user confirmed | S:95 R:80 A:85 D:85 |
+| 7 | Certain | Tests use `sh` as the "tool exists" fixture and a fake name as "tool missing" — `ls` is unusable because it's a hop subcommand | Clarified — user confirmed | S:95 R:80 A:75 D:60 |
+| 8 | Certain | Memory updates touch `cli/subcommands.md` (extend completion section) and `architecture/package-layout.md` (note `__complete` skip near existing `extractDashR` description) | Clarified — user confirmed | S:95 R:75 A:85 D:80 |
+| 9 | Certain | Constitution compliance: §V "Wrap, Don't Reinvent" (use cobra's completion hooks) and §VI "Minimal Surface Area" (no new flags/subcommands) — both satisfied | Clarified — user confirmed | S:95 R:85 A:85 D:80 |
 
-9 assumptions (3 certain, 5 confident, 1 tentative, 0 unresolved).
+9 assumptions (9 certain, 0 confident, 0 tentative, 0 unresolved).
+
+## Clarifications
+
+### Session 2026-05-04 (bulk confirm)
+
+| # | Action | Detail |
+|---|--------|--------|
+| 4 | Confirmed | — |
+| 5 | Confirmed | — |
+| 6 | Confirmed | — |
+| 7 | Confirmed | — |
+| 8 | Confirmed | — |
+| 9 | Confirmed | — |

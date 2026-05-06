@@ -29,17 +29,38 @@ func main() {
 	// -R must be handled before cobra parses argv: the post-<name> argv is a
 	// child command line, not a hop subcommand. We split os.Args into the hop
 	// portion and the child portion before delegating.
-	if target, child, ok, err := extractDashR(os.Args); ok {
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(2)
+	//
+	// EXCEPT for cobra's hidden completion entrypoints (`__complete` /
+	// `__completeNoDesc`): those need to reach rootCmd.Execute() so that the
+	// root's ValidArgsFunction (completeRepoNames) can offer repo-name
+	// candidates for the `$2` slot of `hop -R <TAB>`. Without this skip,
+	// extractDashR would intercept `hop __complete -R "" ""` and emit the
+	// malformed-`-R` error before cobra's completion machinery runs.
+	if !isCompletionInvocation(os.Args) {
+		if target, child, ok, err := extractDashR(os.Args); ok {
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err.Error())
+				os.Exit(2)
+			}
+			os.Exit(runDashR(target, child))
 		}
-		os.Exit(runDashR(target, child))
 	}
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(translateExit(err))
 	}
+}
+
+// isCompletionInvocation reports whether args (typically os.Args, including
+// args[0] = binary name) is a cobra completion entrypoint — i.e. args[1] is
+// `__complete` or `__completeNoDesc`. Used to suppress the pre-cobra `-R`
+// interception in main during tab completion so cobra's completion machinery
+// can dispatch to the root's ValidArgsFunction for the `hop -R <TAB>` shape.
+func isCompletionInvocation(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+	return args[1] == "__complete" || args[1] == "__completeNoDesc"
 }
 
 // extractDashR scans args (typically os.Args, including args[0] = binary name)
