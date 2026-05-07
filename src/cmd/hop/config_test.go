@@ -575,15 +575,88 @@ func TestConfigScanRequiresExactlyOneArg(t *testing.T) {
 	}
 }
 
-func TestConfigScanListedUnderConfigHelp(t *testing.T) {
+func TestConfigSubcommandsListedUnderConfigHelp(t *testing.T) {
 	stdout, _, err := runArgs(t, "config", "--help")
 	if err != nil {
 		t.Fatalf("config --help: %v", err)
 	}
 	gotOut := stdout.String()
-	for _, name := range []string{"init", "where", "scan"} {
-		if !strings.Contains(gotOut, name) {
-			t.Errorf("expected %q in config --help; got:\n%s", name, gotOut)
+	// Cobra renders the subcommand list with each name as a left-anchored cell;
+	// asserting on the full Short line (rather than the bare token) avoids false
+	// positives from substrings that appear inside other subcommands' Shorts —
+	// e.g. the literal "print" appears in `where`'s Short "print the resolved
+	// hop.yaml path", so a bare strings.Contains(gotOut, "print") would pass
+	// even if the `print` subcommand were never registered.
+	wants := []string{
+		"bootstrap a starter hop.yaml",                         // init
+		"print the resolved hop.yaml path",                     // where
+		"scan a directory for git repos and populate hop.yaml", // scan
+		"print the resolved hop.yaml contents to stdout",       // print
+	}
+	for _, line := range wants {
+		if !strings.Contains(gotOut, line) {
+			t.Errorf("expected %q in config --help; got:\n%s", line, gotOut)
 		}
+	}
+}
+
+// --- config print tests ---------------------------------------------------
+
+func TestConfigPrintEmitsFileBytes(t *testing.T) {
+	clearConfigEnv(t)
+	dir := t.TempDir()
+	target := filepath.Join(dir, "hop.yaml")
+	// Fixture exercises comment preservation and inline whitespace — the raw-
+	// bytes contract means stdout must equal these bytes exactly.
+	body := "# top comment\nconfig:\n  code_root: ~/code  # inline comment\nrepos:\n  default:\n    - git@github.com:foo/bar.git\n"
+	if err := os.WriteFile(target, []byte(body), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	t.Setenv("HOP_CONFIG", target)
+
+	stdout, stderr, err := runArgs(t, "config", "print")
+	if err != nil {
+		t.Fatalf("config print: %v", err)
+	}
+	if got := stdout.String(); got != body {
+		t.Errorf("stdout mismatch (want byte-exact match)\nwant: %q\ngot:  %q", body, got)
+	}
+	if got := stderr.String(); got != "" {
+		t.Errorf("expected empty stderr, got %q", got)
+	}
+}
+
+func TestConfigPrintMissingFileErrors(t *testing.T) {
+	clearConfigEnv(t)
+	missing := "/tmp/no-such-print-test-xyz123.yaml"
+	t.Setenv("HOP_CONFIG", missing)
+
+	_, _, err := runArgs(t, "config", "print")
+	if err == nil {
+		t.Fatalf("expected error for missing $HOP_CONFIG file, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "points to "+missing) {
+		t.Errorf("expected error to mention %q (HOP_CONFIG path); got %q", missing, msg)
+	}
+	if !strings.Contains(msg, "does not exist") {
+		t.Errorf("expected 'does not exist' in error; got %q", msg)
+	}
+}
+
+func TestConfigPrintNoConfigErrors(t *testing.T) {
+	clearConfigEnv(t)
+	// Isolate $HOME so the search-order fallback does NOT find a real
+	// ~/.config/hop/hop.yaml on the developer's machine. clearConfigEnv has
+	// already unset HOP_CONFIG and XDG_CONFIG_HOME.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	_, _, err := runArgs(t, "config", "print")
+	if err == nil {
+		t.Fatalf("expected 'no hop.yaml found' error, got nil")
+	}
+	if !strings.Contains(err.Error(), "no hop.yaml found") {
+		t.Errorf("expected 'no hop.yaml found' in error; got %q", err.Error())
 	}
 }
