@@ -2,6 +2,8 @@
 
 > Part of [@sahil87's open source toolkit](https://ai.shll.in) — see all projects there.
 
+[![Latest release](https://img.shields.io/github/v/release/sahil87/hop)](https://github.com/sahil87/hop/releases) [![Downloads](https://img.shields.io/github/downloads/sahil87/hop/total)](https://github.com/sahil87/hop/releases) [![Stars](https://img.shields.io/github/stars/sahil87/hop?style=social)](https://github.com/sahil87/hop/stargazers)
+
 A small Go CLI for locating, opening, and operating on git repositories listed in `hop.yaml`. The dominant use case is navigation: `hop <name>` prints a path; `h <name>` (the single-letter alias) `cd`s your shell into that repo via the bare-name dispatcher. To run a command inside a repo without changing your cwd, the binary supports `hop -R <name> <cmd>...`; once you've installed the shell integration (`eval "$(hop shell-init zsh)"` or `bash`), the friendlier `hop <name> <tool> [args...]` form (e.g. `hop dotfiles cursor`) becomes available — it's a shim-side rewrite to `hop -R`, so it does not work when invoking the binary directly from a script.
 
 ## Install
