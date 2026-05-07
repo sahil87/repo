@@ -28,8 +28,8 @@ func TestShellInitZshContainsHopFunctionAndAliases(t *testing.T) {
 	if !strings.Contains(out, `hi() { command hop "$@"; }`) {
 		t.Fatalf("expected `hi()` alias, got:\n%s", out)
 	}
-	if !strings.Contains(out, `command hop where "$2"`) {
-		t.Fatalf("expected delegation to `command hop where`, got:\n%s", out)
+	if !strings.Contains(out, `command hop "$2" where`) {
+		t.Fatalf("expected delegation to `command hop \"$2\" where` (repo-verb grammar), got:\n%s", out)
 	}
 	// cobra-generated completion appends a `_hop` zsh completion function.
 	if !strings.Contains(out, "_hop") {
@@ -155,6 +155,99 @@ func TestShellInitOmitsLegacyShape(t *testing.T) {
 	}
 	if strings.Contains(out, "is not a known subcommand or a binary on PATH") {
 		t.Errorf("expected NO `is not a known subcommand or a binary on PATH` cheerful-error (removed), got:\n%s", out)
+	}
+}
+
+// TestShellInitZshDoesNotListCdOrWhereAsSubcommand asserts the case-list no
+// longer treats `cd` or `where` as known subcommands at $1. Both verbs moved
+// to $2 in the repo-verb grammar (`hop <name> cd`, `hop <name> where`); the
+// top-level subcommands were removed.
+//
+// Same two-phase structure as TestShellInitZshDoesNotListCodeAsSubcommand:
+// phase 1 anchors the case-list line, phase 2 asserts both tokens are absent.
+func TestShellInitZshDoesNotListCdOrWhereAsSubcommand(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+
+	var caseListLine string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "|completion)") && strings.Contains(line, "shell-init") {
+			caseListLine = line
+			break
+		}
+	}
+	if caseListLine == "" {
+		t.Fatalf("could not find subcommand case-list line. Output:\n%s", out)
+	}
+
+	if strings.Contains(caseListLine, "cd|") || strings.Contains(caseListLine, "|cd|") {
+		t.Fatalf("expected `cd` to be removed from subcommand case-list (moved to $2 verb), got line:\n%s", caseListLine)
+	}
+	if strings.Contains(caseListLine, "where|") || strings.Contains(caseListLine, "|where|") {
+		t.Fatalf("expected `where` to be removed from subcommand case-list (moved to $2 verb), got line:\n%s", caseListLine)
+	}
+}
+
+// TestShellInitZshEmitsCdVerbBranch asserts the shim's repo-name branch
+// includes the explicit-`cd`-verb dispatch (`$2 == "cd"` → `_hop_dispatch cd "$1"`).
+// This is the 2-arg analog of bare-name dispatch.
+func TestShellInitZshEmitsCdVerbBranch(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `elif [[ "$2" == "cd" ]]; then`) {
+		t.Fatalf("expected `elif [[ \"$2\" == \"cd\" ]]; then` (explicit cd verb branch), got:\n%s", out)
+	}
+}
+
+// TestShellInitZshEmitsWhereVerbBranch asserts the shim's repo-name branch
+// includes the explicit-`where`-verb dispatch (`$2 == "where"` →
+// `command hop "$1" where`). This routes the user-facing `hop <name> where`
+// directly to the binary's $2-verb dispatch.
+func TestShellInitZshEmitsWhereVerbBranch(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `elif [[ "$2" == "where" ]]; then`) {
+		t.Fatalf("expected `elif [[ \"$2\" == \"where\" ]]; then` (explicit where verb branch), got:\n%s", out)
+	}
+	if !strings.Contains(out, `command hop "$1" where`) {
+		t.Fatalf("expected `command hop \"$1\" where` (where-verb dispatch to binary), got:\n%s", out)
+	}
+}
+
+// TestShellInitZshDispatchCdHelperHasNoNoArg2Fallback asserts the shim's
+// _hop_dispatch cd) arm does NOT contain the legacy no-$2 fallback
+// (`if [[ -z "$2" ]]; then command hop cd`). The fallback was unreachable
+// after the case-list dropped `cd` from $1 — the only callers (1-arg bare-name
+// and 2-arg explicit-cd) always pass $1 as the dispatch's $2.
+func TestShellInitZshDispatchCdHelperHasNoNoArg2Fallback(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if strings.Contains(out, `command hop cd`) {
+		t.Fatalf("expected NO `command hop cd` invocation (legacy no-$2 fallback removed), got:\n%s", out)
 	}
 }
 
