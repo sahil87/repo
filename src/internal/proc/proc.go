@@ -35,10 +35,11 @@ func Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	return stdout.Bytes(), nil
 }
 
-// RunCapture is Run with an explicit working directory: cmd.Dir is set to dir.
-// Captures stdout to bytes; stderr passes through to the parent. Used by
-// internal/scan to invoke `git -C <dir>` (the cmd.Dir form is preferred over
-// passing `-C` so the subprocess sees the canonical cwd directly).
+// RunCapture is Run with an explicit working directory: cmd.Dir is set to dir
+// (equivalent to running `git -C dir ...` but driven via cmd.Dir rather than a
+// `-C` argument, so the subprocess sees the canonical cwd directly). Captures
+// stdout to bytes; stderr passes through to the parent. Used by internal/scan
+// for per-repo `git remote` / `git remote get-url` invocations.
 //
 // If the binary is not on PATH, the returned error is ErrNotFound. dir is
 // passed verbatim to exec — callers SHOULD validate it (e.g., via os.Stat)

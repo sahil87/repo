@@ -263,7 +263,11 @@ func TestIntegrationConfigScanPrintMode(t *testing.T) {
 		canonNonConv: "git@github.com:other/tool.git",
 	})
 
-	// Run scan in print mode against ~/code (convention root).
+	// Run scan in print mode against ~/code (convention root). Capture both
+	// possible UTC dates around the run to avoid a midnight-edge race: the
+	// header is stamped during the subprocess, so if the UTC day rolls between
+	// capture and assertion the test would flake.
+	dateBefore := time.Now().UTC().Format("2006-01-02")
 	cmd := exec.Command(bin, "config", "scan", scanRoot)
 	cmd.Env = append(os.Environ(),
 		"HOME="+home,
@@ -276,14 +280,15 @@ func TestIntegrationConfigScanPrintMode(t *testing.T) {
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("config scan: %v\nstderr: %s", err, stderr.String())
 	}
+	dateAfter := time.Now().UTC().Format("2006-01-02")
 
 	gotOut := stdout.String()
 	gotErr := stderr.String()
 
-	// Header line.
-	wantDate := time.Now().UTC().Format("2006-01-02")
-	if !strings.Contains(gotOut, wantDate+" (UTC).") {
-		t.Errorf("missing UTC header date %q; stdout=%q", wantDate, gotOut)
+	// Header line. Accept either of the two adjacent UTC dates spanning the run.
+	if !strings.Contains(gotOut, dateBefore+" (UTC).") &&
+		!strings.Contains(gotOut, dateAfter+" (UTC).") {
+		t.Errorf("missing UTC header date %q or %q; stdout=%q", dateBefore, dateAfter, gotOut)
 	}
 	// Convention-match URL is in the rendered YAML.
 	if !strings.Contains(gotOut, "git@github.com:sahil87/hop.git") {

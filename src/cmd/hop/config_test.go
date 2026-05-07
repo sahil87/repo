@@ -542,13 +542,18 @@ func TestConfigScanHeaderUTCFormat(t *testing.T) {
 	scanRoot := t.TempDir()
 	withFakeGitRunner(t, fakeURLForDir(t, map[string]string{}))
 
+	// Capture both possible UTC dates around the run to avoid a midnight-edge
+	// race: the header is stamped during runArgs, so if the UTC day rolls
+	// between capture and assertion the test would flake.
+	dateBefore := time.Now().UTC().Format("2006-01-02")
 	stdout, _, err := runArgs(t, "config", "scan", scanRoot)
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
-	wantDate := time.Now().UTC().Format("2006-01-02")
-	if !strings.Contains(stdout.String(), wantDate+" (UTC).") {
-		t.Errorf("expected UTC date %q in header; stdout=%q", wantDate, stdout.String())
+	dateAfter := time.Now().UTC().Format("2006-01-02")
+	if !strings.Contains(stdout.String(), dateBefore+" (UTC).") &&
+		!strings.Contains(stdout.String(), dateAfter+" (UTC).") {
+		t.Errorf("expected UTC date %q or %q in header; stdout=%q", dateBefore, dateAfter, stdout.String())
 	}
 }
 

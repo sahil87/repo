@@ -153,12 +153,13 @@ func scanHeaderComment(userArg, configPath string) string {
 // scanPlanSummary aggregates the counters needed for the stderr summary block
 // per spec § "Stderr summary".
 type scanPlanSummary struct {
-	defaultMatched    int      // count of Found assigned to default group
-	defaultNew        int      // subset of defaultMatched not already in hop.yaml
-	defaultExisting   int      // subset of defaultMatched already registered
-	inventedGroups    []string // names of invented groups (in caller order)
-	inventedURLCount  int      // total URLs assigned to invented groups
-	skipNoGroupName   int      // CLI-layer slugify-empty skips
+	defaultMatched        int      // count of Found assigned to default group
+	defaultNew            int      // subset of defaultMatched not already in hop.yaml
+	defaultExisting       int      // subset of defaultMatched already registered
+	inventedGroups        []string // names of invented groups (in caller order)
+	inventedURLCount      int      // total URLs assigned to invented groups
+	skipNoGroupName       int      // CLI-layer slugify-empty skips
+	skipAlreadyRegistered int      // CLI-layer dedup skips for non-convention URLs already in hop.yaml
 }
 
 // buildScanPlan converts the Walk's Found list into a yamled.ScanPlan,
@@ -204,6 +205,17 @@ func buildScanPlan(cfg *config.Config, found []scan.Found, stderr io.Writer) (ya
 				summary.defaultNew++
 				plan.DefaultURLs = append(plan.DefaultURLs, f.URL)
 			}
+			continue
+		}
+
+		// Non-convention URL already registered somewhere in hop.yaml:
+		// yamled.MergeScan would silently dedup it, so the plan + summary
+		// would otherwise overstate what's actually being added (and the
+		// re-scan would needlessly rewrite the file). Drop it from the plan
+		// here and surface a skip: line for visibility.
+		if _, in := existingURLs[f.URL]; in {
+			fmt.Fprintf(stderr, "skip: %s: %s already registered in hop.yaml\n", f.Path, f.URL)
+			summary.skipAlreadyRegistered++
 			continue
 		}
 
@@ -447,7 +459,7 @@ func emitScanSummary(stderr io.Writer, userArg string, depth int, found []scan.F
 	}
 
 	// Skipped line.
-	skipParts := buildSkipParts(skips, summary.skipNoGroupName)
+	skipParts := buildSkipParts(skips, summary.skipNoGroupName, summary.skipAlreadyRegistered)
 	if len(skipParts) > 0 {
 		fmt.Fprintf(stderr, "  skipped: %s\n", strings.Join(skipParts, ", "))
 	}
@@ -460,9 +472,9 @@ func emitScanSummary(stderr io.Writer, userArg string, depth int, found []scan.F
 }
 
 // buildSkipParts groups Walk's Skip slice by reason and adds the CLI-layer
-// no-group-name count (which never appears as a Skip entry per spec
-// assumption #28). Empty buckets are omitted.
-func buildSkipParts(skips []scan.Skip, noGroupName int) []string {
+// no-group-name and already-registered counts (which never appear as Skip
+// entries per spec assumption #28). Empty buckets are omitted.
+func buildSkipParts(skips []scan.Skip, noGroupName, alreadyRegistered int) []string {
 	counts := make(map[string]int)
 	for _, s := range skips {
 		counts[s.Reason]++
@@ -476,6 +488,9 @@ func buildSkipParts(skips []scan.Skip, noGroupName int) []string {
 	}
 	if noGroupName > 0 {
 		parts = append(parts, fmt.Sprintf("%d no group name", noGroupName))
+	}
+	if alreadyRegistered > 0 {
+		parts = append(parts, fmt.Sprintf("%d already registered", alreadyRegistered))
 	}
 	return parts
 }

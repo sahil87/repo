@@ -72,7 +72,12 @@ Implemented in `scan.go::classifyDir`. First-match-wins:
 
 `ReasonSubmodule` is reserved in the public Skip enum but **never emitted by the current implementation**. The `internal/scan` walker relies solely on the no-descent invariant from rule 2: once a directory is classified as a normal repo, Walk never enqueues its children, so a nested `.git` inside a parent repo is unreachable through DFS. This was an explicit choice (spec assumption #17 permits "the implementation MAY rely solely on the no-descent invariant if it materially simplifies code"). The constant remains exported for forward compatibility.
 
-If a user passes a submodule path directly as the scan root, it is classified as a normal repo (rule 2) and registered as Found — there is no ancestor on the stack to defensively check against.
+If a user passes a submodule path directly as the scan root, behavior depends on the submodule's `.git` shape (per rule 1 vs. rule 2 above):
+
+- **Standard git submodules** (the typical case) have `.git` as a *file* containing `gitdir: ../.git/modules/<name>`. These hit **rule 1 (worktree)** in `classifyDir` and are skipped with reason `"worktree"`.
+- **Nested checkouts with a real `.git` directory** (less common — e.g., a manually cloned repo placed inside another's tree) hit **rule 2 (normal repo)** and are registered as Found.
+
+The classifier does not distinguish "submodule" from "git worktree" — both surface `.git` as a regular file and both route through rule 1's `"worktree"` skip. There is no ancestor on the stack to defensively check against (the user supplied the submodule path as the scan root), so submodule-vs-worktree disambiguation would require a `git rev-parse` call that the spec deliberately avoids.
 
 ## Symlinks and loop detection
 
@@ -180,10 +185,12 @@ This matches `hop clone`'s precedent: status to stderr, useful piping payload to
 hop config scan: scanned <user-arg> (depth N), found <K> repos.
   matched convention (default): <C> [(<C-new> new, <C-existing> already registered)]   # write-only sub-counts
   invented groups: <I> (<comma-separated names>)
-  skipped: <S1> worktree, <S2> bare repo, <S3> no remote[, <S4> no group name]
+  skipped: <S1> worktree, <S2> bare repo, <S3> no remote[, <S4> no group name][, <S5> already registered]
 [write only:  wrote: <resolved-hop.yaml-path>]
 [print only:  Run with --write to merge into <resolved-hop.yaml-path>.]
 ```
+
+The `already registered` skip bucket counts non-convention URLs that are already present somewhere in `hop.yaml`. `yamled.MergeScan` would silently dedup these on write; the CLI dedups them up-front in `buildScanPlan` so the plan, the summary, and any printed `skip:` lines all agree on what would actually change. Convention-matched URLs use the parallel `(<C-new> new, <C-existing> already registered)` accounting and are NOT counted in this bucket.
 
 Zero-count buckets are elided. Pluralization is per-reason (`1 worktree` vs `2 worktrees`; `1 bare repo` vs `2 bare repos`). Zero-repos case is short-circuited to:
 
