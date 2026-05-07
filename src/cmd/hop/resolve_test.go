@@ -91,6 +91,131 @@ func TestBuildPickerLinesGroupSuffixOnCollision(t *testing.T) {
 	}
 }
 
+// resolveTargetsYAML defines a default group with two repos and a vendor
+// group with one repo. Used by the resolveTargets unit tests.
+const resolveTargetsYAML = `repos:
+  default:
+    dir: /tmp/test-resolve-targets
+    urls:
+      - git@github.com:sahil87/alpha.git
+      - git@github.com:sahil87/beta.git
+  vendor:
+    dir: /tmp/test-resolve-targets-vendor
+    urls:
+      - git@github.com:vendor/gamma.git
+`
+
+func TestResolveTargetsAllReturnsBatchOverFullRegistry(t *testing.T) {
+	writeReposFixture(t, resolveTargetsYAML)
+
+	rs, mode, err := resolveTargets("", true)
+	if err != nil {
+		t.Fatalf("resolveTargets all: %v", err)
+	}
+	if mode != modeBatch {
+		t.Fatalf("expected modeBatch, got %v", mode)
+	}
+	if len(rs) != 3 {
+		t.Fatalf("expected 3 repos, got %d", len(rs))
+	}
+	// Source order: alpha, beta, gamma.
+	if rs[0].Name != "alpha" || rs[1].Name != "beta" || rs[2].Name != "gamma" {
+		t.Fatalf("expected alpha,beta,gamma order; got %s,%s,%s", rs[0].Name, rs[1].Name, rs[2].Name)
+	}
+}
+
+func TestResolveTargetsExactGroupMatchReturnsBatchOfGroup(t *testing.T) {
+	writeReposFixture(t, resolveTargetsYAML)
+
+	rs, mode, err := resolveTargets("vendor", false)
+	if err != nil {
+		t.Fatalf("resolveTargets vendor: %v", err)
+	}
+	if mode != modeBatch {
+		t.Fatalf("expected modeBatch, got %v", mode)
+	}
+	if len(rs) != 1 {
+		t.Fatalf("expected 1 repo (gamma) in vendor batch, got %d", len(rs))
+	}
+	if rs[0].Name != "gamma" {
+		t.Fatalf("expected gamma, got %s", rs[0].Name)
+	}
+}
+
+func TestResolveTargetsSubstringMatchFallsThroughToSingle(t *testing.T) {
+	writeReposFixture(t, resolveTargetsYAML)
+
+	// "alph" matches alpha by substring; not a group name.
+	rs, mode, err := resolveTargets("alph", false)
+	if err != nil {
+		t.Fatalf("resolveTargets alph: %v", err)
+	}
+	if mode != modeSingle {
+		t.Fatalf("expected modeSingle, got %v", mode)
+	}
+	if len(rs) != 1 || rs[0].Name != "alpha" {
+		t.Fatalf("expected single alpha, got %v", rs)
+	}
+}
+
+func TestResolveTargetsGroupNameWinsOverRepoSubstring(t *testing.T) {
+	// Group "alpha" exists AND a repo whose name substring-matches "alpha"
+	// also exists in another group → group wins (rule 2 fires before rule 3).
+	yaml := `repos:
+  alpha:
+    dir: /tmp/test-collision-alpha
+    urls:
+      - git@github.com:org/foo.git
+      - git@github.com:org/bar.git
+  vendor:
+    dir: /tmp/test-collision-vendor
+    urls:
+      - git@github.com:vendor/alpha-shared.git
+`
+	writeReposFixture(t, yaml)
+
+	rs, mode, err := resolveTargets("alpha", false)
+	if err != nil {
+		t.Fatalf("resolveTargets: %v", err)
+	}
+	if mode != modeBatch {
+		t.Fatalf("expected modeBatch (group win), got %v", mode)
+	}
+	if len(rs) != 2 {
+		t.Fatalf("expected 2 repos (alpha-group members), got %d", len(rs))
+	}
+	for _, r := range rs {
+		if r.Group != "alpha" {
+			t.Errorf("expected alpha-group member, got group %s", r.Group)
+		}
+	}
+}
+
+func TestResolveTargetsGroupLookupIsCaseSensitive(t *testing.T) {
+	writeReposFixture(t, resolveTargetsYAML)
+
+	// "Default" (uppercase D) is not an exact match for "default"; rule 2
+	// fails, rule 3 falls through. With no substring repo match for
+	// "Default", resolveByName triggers fzf — which we want to avoid in tests.
+	// Instead, exercise the case-sensitivity by asserting hasGroupExact's
+	// behavior directly.
+	rs, _, err := resolveTargets("vendor", false)
+	if err != nil {
+		t.Fatalf("sanity vendor: %v", err)
+	}
+	if len(rs) != 1 {
+		t.Fatalf("sanity: expected 1 vendor repo, got %d", len(rs))
+	}
+	// Now verify that an uppercased query does NOT match the group via
+	// hasGroupExact directly (avoids fzf invocation).
+	if hasGroupExact(rs, "Vendor") {
+		t.Fatalf("hasGroupExact must be case-sensitive: 'Vendor' should not match group 'vendor'")
+	}
+	if !hasGroupExact(rs, "vendor") {
+		t.Fatalf("hasGroupExact: 'vendor' should match group 'vendor'")
+	}
+}
+
 func TestBuildPickerLinesNoCollision(t *testing.T) {
 	rs := repos.Repos{
 		{Name: "alpha", Group: "default", Path: "/d/alpha", URL: "git@h:o/alpha.git"},

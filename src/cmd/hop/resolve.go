@@ -137,3 +137,78 @@ func resolveAndPrint(cmd *cobra.Command, query string) error {
 	fmt.Fprintln(cmd.OutOrStdout(), repo.Path)
 	return nil
 }
+
+// resolveMode discriminates single-repo vs. batch resolution outcomes for the
+// name-or-group resolver used by `hop pull` and `hop sync`. Single-mode emerges
+// from a substring repo-name match (rule 3); batch-mode emerges from `--all`
+// (rule 1) or an exact group-name match (rule 2). The mode determines exit-code
+// policy in the calling subcommand: single-repo failure → exit 1; batch → exit
+// 1 only if any repo failed (per spec assumption #19).
+type resolveMode int
+
+const (
+	modeSingle resolveMode = iota
+	modeBatch
+)
+
+// resolveTargets is the name-or-group resolver shared by `hop pull` and `hop sync`.
+// Resolution rules (first match wins):
+//
+//  1. all == true  → return every repo from hop.yaml in source order; mode = batch.
+//  2. query exactly matches a group name (case-sensitive) → return every URL in
+//     that group resolved to a Repo; mode = batch.
+//  3. otherwise → fall through to resolveByName (case-insensitive substring on
+//     Name, with fzf for ambiguous/zero matches); mode = single.
+//
+// Pre-conditions enforced by callers:
+//   - all && query != ""   → caller must reject as usage error before calling
+//     this function. resolveTargets ignores query when all is true.
+//   - !all && query == ""  → caller must reject as usage error before calling.
+//
+// Returns errFzfMissing/errFzfCancelled (via resolveByName), or any underlying
+// config-load error. Callers map errFzfMissing → fzfMissingHint + errSilent.
+func resolveTargets(query string, all bool) (repos.Repos, resolveMode, error) {
+	rs, err := loadRepos()
+	if err != nil {
+		return nil, modeSingle, err
+	}
+
+	if all {
+		return rs, modeBatch, nil
+	}
+
+	// Rule 2: exact group-name match (case-sensitive). We re-derive the
+	// per-Group repo list from rs (already projected from the same Config) so
+	// we don't re-load YAML or duplicate FromConfig's path-resolution logic.
+	if hasGroupExact(rs, query) {
+		var batch repos.Repos
+		for _, r := range rs {
+			if r.Group == query {
+				batch = append(batch, r)
+			}
+		}
+		return batch, modeBatch, nil
+	}
+
+	// Rule 3: substring repo-name match (with fzf fallback).
+	repo, err := resolveByName(query)
+	if err != nil {
+		return nil, modeSingle, err
+	}
+	return repos.Repos{*repo}, modeSingle, nil
+}
+
+// hasGroupExact reports whether any repo in rs belongs to a group named exactly
+// query (case-sensitive). Matches `findGroup`'s case-sensitive contract from
+// clone.go and avoids a second config.Load round-trip.
+func hasGroupExact(rs repos.Repos, query string) bool {
+	if query == "" {
+		return false
+	}
+	for _, r := range rs {
+		if r.Group == query {
+			return true
+		}
+	}
+	return false
+}

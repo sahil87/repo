@@ -27,6 +27,12 @@ Usage:
   hop clone <url>           ad-hoc clone: clone the URL, register it in hop.yaml, print landed path
   hop clone --all           clone every repo from hop.yaml that isn't already on disk
   hop clone                 fzf picker, then clone if missing
+  hop pull <name>           Run 'git pull' in the named repo
+  hop pull <group>          Run 'git pull' in every cloned repo of <group>
+  hop pull --all            Run 'git pull' in every cloned repo
+  hop sync <name>           Run 'git pull --rebase' then 'git push' in <name>
+  hop sync <group>          Run sync in every cloned repo of <group>
+  hop sync --all            Run sync in every cloned repo
   hop ls                    list all repos
   hop shell-init <shell>    emit shell integration (zsh or bash). Use: eval "$(hop shell-init zsh)"
   hop config init           bootstrap a starter hop.yaml
@@ -44,6 +50,9 @@ Notes:
     rewrites — the binary's ` + "`-R`" + ` parser expects ` + "`hop -R <name> <cmd>...`" + `. Scripts and CI
     that bypass the shim must use the binary-direct form ` + "`hop -R <name> <cmd>...`" + ` (and
     ` + "`hop <name> where`" + ` for path resolution, which the binary handles directly).
+  - ` + "`pull`" + ` and ` + "`sync`" + ` accept a repo name OR a group name (exact match) as the
+    positional, plus ` + "`--all`" + ` for the full registry. ` + "`sync`" + ` is ` + "`pull --rebase`" + ` + ` + "`push`" + ` —
+    linear history, no auto-resolve on conflict.
   - On ambiguous or no-match queries, fzf opens prefilled with your query.
   - Grammar: first positional is a repo OR a subcommand (mutually exclusive). When it's
     a repo, second positional is a verb (` + "`cd`, `where`" + `), ` + "`-R`" + `, or a tool name.
@@ -103,6 +112,8 @@ func newRootCmd() *cobra.Command {
 
 	cmd.AddCommand(
 		newCloneCmd(),
+		newPullCmd(),
+		newSyncCmd(),
 		newLsCmd(),
 		newShellInitCmd(),
 		newConfigCmd(),

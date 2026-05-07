@@ -85,7 +85,7 @@ Per Constitution Principle IV ("Wrap, Don't Reinvent") — wrap external tools, 
 
 | External call | Where | Why no wrapper package |
 |---|---|---|
-| `git clone` | `cmd/hop/clone.go` calls `proc.Run(ctx, "git", "clone", url, path)` inline | Single operation; a 5-line `internal/git/` package is premature abstraction. Promote later if `git fetch` / `git pull` / `git status` get added. |
+| `git clone`, `git pull`, `git pull --rebase`, `git push` | `cmd/hop/clone.go`, `cmd/hop/pull.go`, `cmd/hop/sync.go` each call `proc.RunCapture(ctx, path, "git", ...)` (or `proc.Run` for clone) inline | Each call site is one line; `internal/proc.RunCapture` already enforces the cmd.Dir + argv-slice contract. A dedicated `internal/git/` package would be a thin pass-through that adds an indirection without containing logic. Promote later if a verb composes more git operations (e.g., a `status`-then-`fetch` flow that benefits from a single function boundary). |
 | YAML parsing | `internal/config/config.go` calls `yaml.Unmarshal` directly into `*yaml.Node` | `gopkg.in/yaml.v3` already is the wrapper. |
 | `-R` child exec | `cmd/hop/main.go::runDashR` calls `proc.RunForeground` | Wrapping is `internal/proc`'s job; the binary just composes. |
 
@@ -96,7 +96,7 @@ The change introduced two primitives that other operations build on:
 - **`hop <name> where`** — path resolver. Stdin/stdout-friendly: `cd "$(hop outbox where)"` works as a shell composition. The repo-verb grammar puts the repo first; the v0.x top-level `hop where <name>` was removed.
 - **`hop <name> -R <cmd>...`** — exec-in-context. Repo-scoped: run a child command with cwd set to the resolved repo dir, without leaving the parent shell's cwd changed. The shim's `hop <name> <tool>` tool-form sugar rewrites to this. The shim flips the user-facing form to the binary's internal `hop -R <name> <cmd>...` shape so `extractDashR` (in `cmd/hop/main.go`) is unchanged.
 
-Future verbs (`sync`, `autosync`, `features`) build on these rather than each one re-implementing path resolution and exec.
+`hop pull` and `hop sync` (added in change `xj3k`) compose a third primitive — `resolveTargets` (`cmd/hop/resolve.go`) — which wraps `resolveByName` with a name-or-group rule order so registry verbs can take a single repo, a group, or `--all` from the same positional slot. Future batch-friendly verbs (e.g., `autosync`, `features`) build on `resolveTargets` rather than each re-implementing the rule order. Path resolution and exec stay on `where` and `-R`.
 
 ## Security guarantees
 

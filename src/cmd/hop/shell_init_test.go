@@ -377,6 +377,41 @@ func TestShellInitZshListsHelpAsSubcommand(t *testing.T) {
 	}
 }
 
+// TestShellInitZshListsPullAndSyncAsSubcommands asserts the case-list includes
+// `pull` and `sync` so the shim routes `hop pull <name>` and `hop sync <name>`
+// through `_hop_dispatch` (rule 3) instead of falling through to rule 5
+// (tool-form), which would rewrite them to `command hop -R pull <name>` and
+// fail with `-R: 'pull' not found.` (or worse, resolve `pull` as a non-existent
+// repo). Same two-phase structure as the other case-list assertions.
+func TestShellInitZshListsPullAndSyncAsSubcommands(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+
+	var caseListLine string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "|completion)") && strings.Contains(line, "shell-init") {
+			caseListLine = line
+			break
+		}
+	}
+	if caseListLine == "" {
+		t.Fatalf("could not find subcommand case-list line. Output:\n%s", out)
+	}
+
+	if !strings.Contains(caseListLine, "|pull|") && !strings.HasPrefix(strings.TrimSpace(caseListLine), "pull|") {
+		t.Fatalf("expected `pull` in the subcommand case-list (so the shim routes `hop pull <name>` correctly), got line:\n%s", caseListLine)
+	}
+	if !strings.Contains(caseListLine, "|sync|") && !strings.HasPrefix(strings.TrimSpace(caseListLine), "sync|") {
+		t.Fatalf("expected `sync` in the subcommand case-list, got line:\n%s", caseListLine)
+	}
+}
+
 func TestShellInitBashEmitsFunctionAndCompletion(t *testing.T) {
 	rootForCompletion = newRootCmd()
 	defer func() { rootForCompletion = nil }()
