@@ -498,6 +498,85 @@ func TestShellInitZshSChecksSessionExists(t *testing.T) {
 	}
 }
 
+// TestShellInitZshWVerbCapsArgs asserts the shim's `$2 == "w"` branch rejects
+// callers with too many positionals (more than `w [window-name]` allows).
+// Without this guard, extra args (e.g. `h repo w win extra`) would be
+// silently dropped by the `${@:3}` slice + `_hop_dispatch w)` arm's `$3`-only
+// consumption — surprising behavior. The shim caps at 3 positionals and
+// emits a usage error for `$# > 3`.
+func TestShellInitZshWVerbCapsArgs(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `[[ $# -gt 3 ]]`) {
+		t.Fatalf("expected `[[ $# -gt 3 ]]` arg-cap guard for w verb, got:\n%s", out)
+	}
+	if !strings.Contains(out, `'w' takes at most one optional argument`) {
+		t.Fatalf("expected w over-arg usage error string, got:\n%s", out)
+	}
+}
+
+// TestShellInitZshSVerbCapsArgs is the s-verb counterpart of
+// TestShellInitZshWVerbCapsArgs. The shim's `$2 == "s"` branch caps at 4
+// positionals (the user-visible grammar is `s [session [window]]`).
+func TestShellInitZshSVerbCapsArgs(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `[[ $# -gt 4 ]]`) {
+		t.Fatalf("expected `[[ $# -gt 4 ]]` arg-cap guard for s verb, got:\n%s", out)
+	}
+	if !strings.Contains(out, `'s' takes at most two optional arguments`) {
+		t.Fatalf("expected s over-arg usage error string, got:\n%s", out)
+	}
+}
+
+// TestShellInitZshDispatchWArmCapsArgs asserts the defense-in-depth arg cap
+// inside `_hop_dispatch w)` — the dispatch helper itself rejects extras so
+// it can't be invoked with unsupported trailing positionals (e.g. via a
+// future caller that forgets to validate). Address Copilot review comment
+// on shell_init.go:137.
+func TestShellInitZshDispatchWArmCapsArgs(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `'_hop_dispatch w'`) {
+		t.Fatalf("expected `_hop_dispatch w` dispatch-level usage error string, got:\n%s", out)
+	}
+}
+
+// TestShellInitZshDispatchSArmCapsArgs is the s-verb counterpart of
+// TestShellInitZshDispatchWArmCapsArgs. Addresses Copilot review comment
+// on shell_init.go:149.
+func TestShellInitZshDispatchSArmCapsArgs(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `'_hop_dispatch s'`) {
+		t.Fatalf("expected `_hop_dispatch s` dispatch-level usage error string, got:\n%s", out)
+	}
+}
+
 func TestShellInitBashEmitsFunctionAndCompletion(t *testing.T) {
 	rootForCompletion = newRootCmd()
 	defer func() { rootForCompletion = nil }()

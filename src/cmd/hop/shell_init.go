@@ -84,10 +84,21 @@ hop() {
       elif [[ "$2" == "w" ]]; then
         # hop <name> w [window-name] -> new tmux window in current session,
         # cwd = repo. Window name defaults to repo name. Errors if not in tmux.
+        # Cap at 3 positionals: the user-visible grammar is w [window-name]
+        # — anything beyond would be silently dropped, so reject explicitly.
+        if [[ $# -gt 3 ]]; then
+          printf "hop: 'w' takes at most one optional argument: w [window-name]\n" >&2
+          return 2
+        fi
         _hop_dispatch w "$1" "${@:3}"
       elif [[ "$2" == "s" ]]; then
         # hop <name> s [session-name [window-name]] -> new tmux session + window,
         # cwd = repo. Both names default to repo name. Errors if session exists.
+        # Cap at 4 positionals: grammar is s [session-name [window-name]].
+        if [[ $# -gt 4 ]]; then
+          printf "hop: 's' takes at most two optional arguments: s [session-name [window-name]]\n" >&2
+          return 2
+        fi
         _hop_dispatch s "$1" "${@:3}"
       elif [[ "$2" == "-R" ]]; then
         # Canonical exec form: hop <name> -R <cmd>... → command hop -R <name> <cmd>...
@@ -127,6 +138,12 @@ _hop_dispatch() {
     w)
       # hop <name> w [window-name] -> new tmux window in current session.
       # Caller passes: $2=repo name, $3=optional window name (defaults to repo).
+      # Defense-in-depth: enforce the same arg cap the hop() shim emits, so
+      # direct callers of _hop_dispatch can't slip extras past the boundary.
+      if [[ $# -gt 3 ]]; then
+        printf "hop: '_hop_dispatch w' takes at most 3 args: w <repo> [window-name]\n" >&2
+        return 2
+      fi
       local path name
       path="$(command hop "$2" where)" || return $?
       name="${3:-$2}"
@@ -140,6 +157,11 @@ _hop_dispatch() {
       # hop <name> s [session-name [window-name]] -> new tmux session + window.
       # Caller passes: $2=repo name, $3=optional session name (defaults to repo),
       # $4=optional window name (defaults to repo). Errors if session exists.
+      # Defense-in-depth: enforce the same arg cap the hop() shim emits.
+      if [[ $# -gt 4 ]]; then
+        printf "hop: '_hop_dispatch s' takes at most 4 args: s <repo> [session-name [window-name]]\n" >&2
+        return 2
+      fi
       local path session window
       path="$(command hop "$2" where)" || return $?
       session="${3:-$2}"
