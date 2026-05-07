@@ -1,0 +1,14 @@
+{"action":"enter","driver":"fab-new","event":"stage-transition","stage":"intake","ts":"2026-05-07T10:05:32Z"}
+{"args":"add w (tmux window) and s (tmux session) verbs at $2, parallel to existing cd/where verbs","cmd":"fab-new","event":"command","ts":"2026-05-07T10:05:32Z"}
+{"delta":"+4.1","event":"confidence","score":4.1,"trigger":"calc-score","ts":"2026-05-07T10:07:34Z"}
+{"delta":"+0.0","event":"confidence","score":4.1,"trigger":"calc-score","ts":"2026-05-07T10:07:48Z"}
+{"cmd":"fab-fff","event":"command","ts":"2026-05-07T10:09:01Z"}
+{"delta":"-0.9","event":"confidence","score":3.2,"trigger":"calc-score","ts":"2026-05-07T10:11:49Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"spec","ts":"2026-05-07T10:11:53Z"}
+{"cmd":"fab-clarify","event":"command","ts":"2026-05-07T10:12:24Z"}
+{"cmd":"fab-clarify","event":"command","ts":"2026-05-07T10:15:23Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"apply","ts":"2026-05-07T10:15:46Z"}
+{"action":"enter","driver":"fab-continue","event":"stage-transition","stage":"review","ts":"2026-05-07T10:21:39Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"hydrate","ts":"2026-05-07T10:26:02Z"}
+{"event":"review","result":"passed","ts":"2026-05-07T10:26:02Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"ship","ts":"2026-05-07T11:53:09Z"}

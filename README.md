@@ -38,7 +38,7 @@ Builds the binary and copies it to `~/.local/bin/hop`. Make sure that directory 
 
 ## Shell integration
 
-For the shell integration (bare-name `cd`, the `hop <name> <tool>` sugar, the `h` and `hi` aliases, and tab completion):
+For the shell integration (bare-name `cd`, the `hop <name> <tool>` sugar, the tmux-aware `w` and `s` verbs, the `h` and `hi` aliases, and tab completion):
 
 ```sh
 eval "$(hop shell-init zsh)"   # zsh
@@ -80,10 +80,14 @@ hop outbox git status     # tool-form: run `git status` inside outbox; cwd uncha
 hop dotfiles cursor       # tool-form: open dotfiles in cursor
 hop outbox -R git status  # canonical user-facing form (explicit; equivalent to the tool-form above)
 hop -R outbox git status  # binary-direct form (works without the shim, e.g. in scripts)
+h outbox w                # tmux: open a new window in the current session, cwd = outbox
+h outbox s                # tmux: start a new session named "outbox" attached to that repo
 hop clone outbox          # registry-driven: clone outbox if it isn't already on disk
 hop clone git@github.com:foo/bar.git
                           # ad-hoc: clone the URL, register it in hop.yaml, cd into it
 ```
+
+The `w` (tmux **w**indow) and `s` (tmux **s**ession) verbs are shim-only. `h <name> w [window]` opens a new window in the current tmux session with cwd set to the repo (window name defaults to the repo name); `h <name> s [session [window]]` creates a new session (defaults to repo name) and either attaches in the foreground (outside tmux) or switches to it (inside tmux). `s` errors if the session already exists — use `w` to add a window in the current session instead.
 
 ## Config schema
 

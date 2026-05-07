@@ -22,15 +22,22 @@ import (
 //       $# == 1                                         → _hop_dispatch cd "$1" (bare-name → cd)
 //       $# >= 2 and $2 == "cd"                          → _hop_dispatch cd "$1" (explicit cd verb)
 //       $# >= 2 and $2 == "where"                       → command hop "$1" where (binary handles)
+//       $# >= 2 and $2 == "w"                           → _hop_dispatch w "$1" "${@:3}" (tmux-window verb)
+//       $# >= 2 and $2 == "s"                           → _hop_dispatch s "$1" "${@:3}" (tmux-session verb)
 //       $# >= 2 and $2 == "-R"                          → command hop -R "$1" "${@:3}" (canonical exec form)
 //       otherwise                                       → command hop -R "$1" "$2" "${@:3}" (tool-form sugar)
 //
 // The shim does NOT inspect PATH for $1 or $2 — the grammar is "subcommand
-// xor repo" in $1, and $2 is either a verb (`cd`, `where`), `-R`, or a tool name.
-// Missing tools surface via the binary's `hop: -R: '<cmd>' not found.` error.
-// The shim rewrites the user-facing `hop <name> -R <cmd>...` form to
+// xor repo" in $1, and $2 is either a verb (`cd`, `where`, `w`, `s`), `-R`, or
+// a tool name. Missing tools surface via the binary's `hop: -R: '<cmd>' not found.`
+// error. The shim rewrites the user-facing `hop <name> -R <cmd>...` form to
 // `command hop -R <name> <cmd>...` so the binary's extractDashR continues to
 // see the existing internal shape.
+//
+// The `w` and `s` verbs are tmux-aware and shim-only; the binary errors with
+// `wHint`/`sHint` if invoked directly. `_hop_dispatch w)` calls `tmux new-window`;
+// `_hop_dispatch s)` calls `tmux has-session` + `tmux new-session` (with
+// `tmux switch-client` when inside an existing tmux session).
 const posixInit = `# hop shell integration — emit via: eval "$(hop shell-init <shell>)"
 # Installs: hop function (with bare-name dispatch + verb dispatch + tool-form), h alias, hi alias, completion.
 
@@ -60,10 +67,11 @@ hop() {
         # Bare-name dispatch: hop <name> -> cd into the repo (shorthand for hop <name> cd).
         _hop_dispatch cd "$1"
       elif [[ "$2" == "cd" || "$2" == "where" ]]; then
-        # Verb dispatch at $2. The verbs are 2-arg only — extra args (e.g.
-        # hop <name> cd extra) are forwarded to the binary so cobra's
+        # Verb dispatch at $2 for the 2-arg-only verbs (cd, where). Extra args
+        # (e.g. hop <name> cd extra) are forwarded to the binary so cobra's
         # MaximumNArgs(2) rejects with the right error rather than silently
-        # dropping args.
+        # dropping args. The w/s verbs intentionally accept optional 3rd/4th
+        # positional args, so they are handled in their own branches below.
         if [[ $# -gt 2 ]]; then
           command hop "$@"
         elif [[ "$2" == "cd" ]]; then
@@ -73,6 +81,14 @@ hop() {
           # hop <name> where -> binary resolves and prints the path.
           command hop "$1" where
         fi
+      elif [[ "$2" == "w" ]]; then
+        # hop <name> w [window-name] -> new tmux window in current session,
+        # cwd = repo. Window name defaults to repo name. Errors if not in tmux.
+        _hop_dispatch w "$1" "${@:3}"
+      elif [[ "$2" == "s" ]]; then
+        # hop <name> s [session-name [window-name]] -> new tmux session + window,
+        # cwd = repo. Both names default to repo name. Errors if session exists.
+        _hop_dispatch s "$1" "${@:3}"
       elif [[ "$2" == "-R" ]]; then
         # Canonical exec form: hop <name> -R <cmd>... → command hop -R <name> <cmd>...
         # The shim flips the user-facing form to the binary's internal shape
@@ -106,6 +122,39 @@ _hop_dispatch() {
         fi
       else
         command hop "$@"
+      fi
+      ;;
+    w)
+      # hop <name> w [window-name] -> new tmux window in current session.
+      # Caller passes: $2=repo name, $3=optional window name (defaults to repo).
+      local path name
+      path="$(command hop "$2" where)" || return $?
+      name="${3:-$2}"
+      if [[ -z "$TMUX" ]]; then
+        printf "hop: 'w' requires an active tmux session. Use 'h <name> s' to start one.\n" >&2
+        return 1
+      fi
+      tmux new-window -c "$path" -n "$name"
+      ;;
+    s)
+      # hop <name> s [session-name [window-name]] -> new tmux session + window.
+      # Caller passes: $2=repo name, $3=optional session name (defaults to repo),
+      # $4=optional window name (defaults to repo). Errors if session exists.
+      local path session window
+      path="$(command hop "$2" where)" || return $?
+      session="${3:-$2}"
+      window="${4:-$2}"
+      if tmux has-session -t "$session" 2>/dev/null; then
+        printf "hop: tmux session '%s' already exists. Use 'h <name> w' to add a window in the current session.\n" "$session" >&2
+        return 1
+      fi
+      if [[ -z "$TMUX" ]]; then
+        # Outside tmux: foreground attach via new-session (no -d).
+        tmux new-session -s "$session" -c "$path" -n "$window"
+      else
+        # Inside tmux: detached new-session + switch-client (nested-tmux is forbidden).
+        tmux new-session -d -s "$session" -c "$path" -n "$window"
+        tmux switch-client -t "$session"
       fi
       ;;
     *)

@@ -1,0 +1,40 @@
+id: is5r
+name: 260507-is5r-add-w-s-tmux-verbs
+created: 2026-05-07T10:05:32Z
+created_by: sahil-weaver
+change_type: feat
+issues: []
+progress:
+    intake: done
+    spec: done
+    apply: done
+    review: done
+    hydrate: done
+    ship: active
+    review-pr: pending
+plan:
+    generated: true
+    task_count: 21
+    acceptance_count: 32
+    acceptance_completed: 32
+confidence:
+    certain: 19
+    confident: 6
+    tentative: 0
+    unresolved: 0
+    score: 3.2
+    fuzzy: true
+    dimensions:
+        signal: 87.4
+        reversibility: 83.4
+        competence: 87.6
+        disambiguation: 89.2
+stage_metrics:
+    intake: {started_at: "2026-05-07T10:05:32Z", driver: fab-new, iterations: 1, completed_at: "2026-05-07T10:11:53Z"}
+    spec: {started_at: "2026-05-07T10:11:53Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-07T10:15:46Z"}
+    apply: {started_at: "2026-05-07T10:15:46Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-07T10:21:39Z"}
+    review: {started_at: "2026-05-07T10:21:39Z", driver: fab-continue, iterations: 1, completed_at: "2026-05-07T10:26:02Z"}
+    hydrate: {started_at: "2026-05-07T10:26:02Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-07T11:53:09Z"}
+    ship: {started_at: "2026-05-07T11:53:09Z", driver: fab-fff, iterations: 1}
+prs: []
+last_updated: 2026-05-07T11:53:09Z

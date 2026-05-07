@@ -11,8 +11,10 @@
 | `hop <name>` | `<name>` | Binary form: print bare-name hint to stderr, exit 2 (1-arg dispatch is shell-only — shorthand for `hop <name> cd`). Shell-function form (after `eval`): cd into the resolved path. | Binary: 2. Shell function: 0 success, 1 no match |
 | `hop <name> cd` | `<name> cd` | Binary form: print `cd` hint to stderr, exit 2 (cd is shell-only). Shell-function form: cd into the resolved path. | Binary: 2. Shell function: 0 success, 1 no match |
 | `hop <name> where` | `<name> where` | Resolve `<name>` and print absolute path on stdout. Replaces v0.x's top-level `hop where <name>` subcommand (removed). | 0 selected, 1 no match, 130 cancelled |
+| `hop <name> w [window-name]` | `<name> w` plus optional 3rd positional (shim only — binary cap is 2) | Binary form: print `wHint` (`hop: 'w' is shell-only (tmux window). ...`) to stderr, exit 2 (`w` is shell-only). Shell-function form: resolve `<name>`, default window name to repo name, then `tmux new-window -c <path> -n <name>` in the current tmux session (focuses the new window). Errors with `hop: 'w' requires an active tmux session. Use 'h <name> s' to start one.` and exit 1 when `$TMUX` is unset. Lazy `tmux` runtime dependency. | Binary: 2. Shell function: 0 success, 1 if `$TMUX` is unset / `<name>` fails to resolve / `tmux` invocation fails |
+| `hop <name> s [session-name [window-name]]` | `<name> s` plus optional 3rd / 4th positionals (shim only — binary cap is 2) | Binary form: print `sHint` (`hop: 's' is shell-only (tmux session). ...`) to stderr, exit 2 (`s` is shell-only). Shell-function form: resolve `<name>`, default session and window names to repo name, then `tmux has-session` existence check (errors `hop: tmux session '<name>' already exists. Use 'h <name> w' to add a window in the current session.` on hit). Outside tmux: `tmux new-session -s <session> -c <path> -n <window>` (foreground attach). Inside tmux: `tmux new-session -d ...` followed by `tmux switch-client -t <session>` (nested-tmux is forbidden). Lazy `tmux` runtime dependency. | Binary: 2. Shell function: 0 success, 1 if session already exists / `<name>` fails to resolve / `tmux` invocation fails |
 | `hop <name> -R <cmd>...` | positional + flag + child argv | Resolve `<name>`, then exec `<cmd>...` with `cwd = <resolved-path>` and inherited stdio. Implemented in the shim, which rewrites to the binary's internal `command hop -R <name> <cmd>...` shape. | child's exit code; 1 if resolution fails; 2 on usage error |
-| `hop <name> <tool> [args...]` | (shim only) | Sugar for `hop <name> -R <tool> [args...]`. Implemented in `hop shell-init` output; the binary itself errors with the tool-form hint (`'<tool>' is not a hop verb (cd, where)...`). | tool's exit code; 1 if `<tool>` is missing on PATH (via the binary's `-R` error path) or `<name>` fails to resolve |
+| `hop <name> <tool> [args...]` | (shim only) | Sugar for `hop <name> -R <tool> [args...]`. Implemented in `hop shell-init` output; the binary itself errors with the tool-form hint (`'<tool>' is not a hop verb (cd, where, w, s)...`). | tool's exit code; 1 if `<tool>` is missing on PATH (via the binary's `-R` error path) or `<name>` fails to resolve |
 | `hop clone [<name>] \| --all` | optional `<name>` or `--all` | Clone single (resolved) or all missing repos | 0 success, 1 path conflict, non-zero on git failure |
 | `hop clone <url>` | 1 (URL form, detected by `looksLikeURL`) | Ad-hoc clone with auto-registration. Flags: `--group`, `--no-add`, `--no-cd`, `--name`. | 0 success, 1 missing group / path conflict / git failure |
 | `hop ls` | (none) | Print all repos as `name<spaces>path` columns | 0 |
@@ -120,8 +122,80 @@ When two or more repos share the same `Name` across different groups, the displa
 
 > **GIVEN** the user invokes the binary directly (no shim)
 > **WHEN** they run `hop outbox cursor`
-> **THEN** the binary prints to stderr: `hop: 'cursor' is not a hop verb (cd, where). For tool-form, install the shim: eval "$(hop shell-init zsh)", or use: hop -R "<name>" <tool> [args...]`
+> **THEN** the binary prints to stderr: `hop: 'cursor' is not a hop verb (cd, where, w, s). For tool-form, install the shim: eval "$(hop shell-init zsh)", or use: hop -R "<name>" <tool> [args...]`
 > **AND** exit code is 2
+
+#### `hop <name> w` binary form (tmux-window verb attempt)
+
+> **GIVEN** the user invokes the binary directly (no shim)
+> **WHEN** they run `hop outbox w`
+> **THEN** the binary prints to stderr: `hop: 'w' is shell-only (tmux window). Add 'eval "$(hop shell-init zsh)"' to your zshrc and run inside a tmux session.`
+> **AND** stdout is empty
+> **AND** exit code is 2
+
+#### `hop <name> w` shell-function form, inside tmux
+
+> **GIVEN** the user has run `eval "$(hop shell-init zsh)"` and is inside an active tmux session (`$TMUX` is set)
+> **AND** `outbox` resolves to `/home/user/code/outbox`
+> **WHEN** they run `hop outbox w`
+> **THEN** the shim's `$2 == "w"` branch dispatches to `_hop_dispatch w "outbox"`
+> **AND** `_hop_dispatch w)` resolves the path via `command hop "outbox" where`
+> **AND** the helper invokes `tmux new-window -c /home/user/code/outbox -n outbox` (window name defaults to repo)
+> **AND** tmux focuses the new window (no `-d` flag passed)
+> **AND** exit code is 0
+
+> **GIVEN** the same setup
+> **WHEN** they run `hop outbox w api`
+> **THEN** the shim invokes `tmux new-window -c /home/user/code/outbox -n api` (explicit window name)
+
+#### `hop <name> w` shell-function form, outside tmux
+
+> **GIVEN** the user has the shim installed but is NOT inside a tmux session (`$TMUX` is unset)
+> **WHEN** they run `hop outbox w`
+> **THEN** the shim's `_hop_dispatch w)` arm prints to stderr: `hop: 'w' requires an active tmux session. Use 'h <name> s' to start one.`
+> **AND** exit code is 1
+> **AND** no `tmux` process is invoked
+
+#### `hop <name> s` binary form (tmux-session verb attempt)
+
+> **GIVEN** the user invokes the binary directly (no shim)
+> **WHEN** they run `hop outbox s`
+> **THEN** the binary prints to stderr: `hop: 's' is shell-only (tmux session). Add 'eval "$(hop shell-init zsh)"' to your zshrc.`
+> **AND** stdout is empty
+> **AND** exit code is 2
+
+#### `hop <name> s` shell-function form, outside tmux
+
+> **GIVEN** the user has the shim installed and is NOT inside tmux
+> **AND** `outbox` resolves to `/home/user/code/outbox`
+> **AND** no tmux session named `outbox` currently exists
+> **WHEN** they run `hop outbox s`
+> **THEN** the shim's `$2 == "s"` branch dispatches to `_hop_dispatch s "outbox"`
+> **AND** the helper resolves the path, defaults session and window names to `outbox`, runs `tmux has-session -t outbox` (returns non-zero — no existing session)
+> **AND** invokes `tmux new-session -s outbox -c /home/user/code/outbox -n outbox` (foreground attach)
+> **AND** the user's terminal becomes the tmux client attached to the new session
+
+> **GIVEN** the same setup
+> **WHEN** they run `hop outbox s outbox-dev api`
+> **THEN** the helper invokes `tmux new-session -s outbox-dev -c /home/user/code/outbox -n api` (explicit session and window names)
+
+#### `hop <name> s` shell-function form, inside tmux
+
+> **GIVEN** the user is inside an active tmux session (`$TMUX` is set)
+> **AND** no session named `outbox` exists
+> **WHEN** they run `hop outbox s`
+> **THEN** the helper invokes `tmux new-session -d -s outbox -c <path> -n outbox` (detached because nested-tmux is forbidden)
+> **AND** invokes `tmux switch-client -t outbox` (the in-tmux idiom for "make this session current")
+> **AND** the user's existing tmux client switches to the new session
+
+#### `hop <name> s` shell-function form, session already exists
+
+> **GIVEN** a tmux session named `outbox-dev` already exists
+> **WHEN** they run `hop outbox s outbox-dev`
+> **THEN** `tmux has-session -t outbox-dev` returns 0 (session exists)
+> **AND** the helper prints to stderr: `hop: tmux session 'outbox-dev' already exists. Use 'h <name> w' to add a window in the current session.`
+> **AND** exit code is 1
+> **AND** no `tmux new-session`, `tmux switch-client`, or `tmux attach` is invoked
 
 #### Bare-name dispatch (shell shim)
 
@@ -177,14 +251,18 @@ Resolution order in the shim's `hop()` function (5-step ladder, first match wins
 
 1. No args → bare picker (`command hop`).
 2. `$1` is `__complete*` → `command hop "$@"` (cobra's hidden completion entrypoint).
-3. `$1` is a known subcommand (`clone`, `ls`, `shell-init`, `config`, `update`, `help`, `--help`, `-h`, `--version`, `completion` — `cd` and `where` are NOT in this list; they're $2 verbs now) → `_hop_dispatch "$@"`.
+3. `$1` is a known subcommand (`clone`, `ls`, `shell-init`, `config`, `update`, `help`, `--help`, `-h`, `--version`, `completion` — `cd`, `where`, `w`, `s` are NOT in this list; they're $2 verbs now) → `_hop_dispatch "$@"`.
 4. `$1` is a flag (`-R`, `-h`, `-v`, ...) → `command hop "$@"`.
-5. Otherwise (`$1` is treated as a repo name) — dispatch on `$2`:
+5. Otherwise (`$1` is treated as a repo name) — dispatch on `$2` in this branch order: `cd`, `where`, `w`, `s`, `-R`, otherwise (with `$# == 1` short-circuiting to the `cd` arm before the chain begins):
    - `$# == 1` → `_hop_dispatch cd "$1"` (bare-name → `cd`).
    - `$2 == "cd"` → `_hop_dispatch cd "$1"` (explicit `cd` verb).
    - `$2 == "where"` → `command hop "$1" where` (binary handles via the `where`-verb dispatch).
+   - `$2 == "w"` → `_hop_dispatch w "$1" "${@:3}"` (tmux-window verb; optional 3rd positional names the window, defaults to repo name).
+   - `$2 == "s"` → `_hop_dispatch s "$1" "${@:3}"` (tmux-session verb; optional 3rd / 4th positionals name the session and window, both default to repo name).
    - `$2 == "-R"` → `command hop -R "$1" "${@:3}"` (canonical exec form, shim-rewritten so the binary's `extractDashR` sees the existing `-R <name> <cmd>...` shape).
    - Otherwise → `command hop -R "$1" "$2" "${@:3}"` (tool-form sugar).
+
+The `cd`/`where` verbs share an extra-args guard (`if [[ $# -gt 2 ]]; then command hop "$@"`) so cobra's `MaximumNArgs(2)` raises rather than silently dropping extras; the `w`/`s` verbs intentionally accept optional 3rd/4th positionals and bypass that guard via their own dedicated branches.
 
 > **GIVEN** `cursor` is on PATH and `dotfiles` resolves uniquely
 > **WHEN** I run `hop dotfiles cursor` under the shim
@@ -399,6 +477,7 @@ External tools (`fzf`, `git`, `<cmd>` for `-R`) are checked **lazily** — only 
 | `git` | `hop clone` (any form); `hop config scan <dir>` (only when the walk finds a `.git` candidate — empty trees succeed without `git`) | Print to stderr: `hop: git is not installed.` Exit 1. |
 | `<cmd>` | `hop <name> -R <cmd>...` (and the shim's `hop <name> <tool>` sugar that rewrites to it) | Print to stderr: `hop: -R: '<cmd>' not found.` Exit 1. |
 | `brew` | `hop update` (when installed via brew) | Print to stderr: `hop update: brew not found on PATH.` Exit 1. |
+| `tmux` | `hop <name> w` and `hop <name> s` via the shim's `_hop_dispatch w)` / `s)` arms | No hop-owned hint — the shim invokes `tmux` directly; a missing `tmux` binary surfaces via the shell's standard `command not found` error. The hop binary itself is tmux-free. |
 
 Subcommands that don't need a tool MUST work without it. Examples:
 - `hop foo where` (when `foo` is a unique substring match) does not invoke fzf — works without `fzf` installed.
@@ -415,7 +494,7 @@ The `Usage:` block enumerates (in this order): `hop`, `hop <name>`, `hop <name> 
 The `Notes:` block in `rootLong` documents:
 - `hop <name>` and `hop <name> cd` require shell integration (a binary can't change its parent shell's cwd). Without it, use `cd "$(hop <name> where)"`.
 - On ambiguous or no-match queries, fzf opens prefilled with the user's query.
-- Grammar: first positional is a repo OR a subcommand (mutually exclusive). When it's a repo, second positional is a verb (`cd`, `where`), `-R`, or a tool name.
+- Grammar: first positional is a repo OR a subcommand (mutually exclusive). When it's a repo, second positional is a verb (`cd`, `where`, `w`, `s`), `-R`, or a tool name.
 - Config search order: `$HOP_CONFIG`, then `$XDG_CONFIG_HOME/hop/hop.yaml`, then `$HOME/.config/hop/hop.yaml`.
 
 ### Cobra Wiring
@@ -462,4 +541,26 @@ The `-R` flag bypasses cobra entirely and uses `os.Exit` directly with the child
 10. **Grammar is `subcommand` xor `repo` at $1. The first positional is one or the other — never a tool, never a verb.** When `$1` is a repo, `$2` is a verb (`cd`, `where`), `-R`, or a tool name. The verbs `cd` and `where` are NOT subcommands at `$1` — they exist only at `$2` in the repo-first form. This collapses the shim's precedence ladder (no PATH inspection of `$1`, no builtin filtering, no cheerful-error escape hatches) and makes tab completion work in the repo slot for free (`completeRepoNames` already runs on `$1`). The user-facing canonical exec form is `hop <name> -R <cmd>...` and tool-form sugar is `hop <name> <tool> [args...]` — both shim-only; the binary itself does NOT interpret tool-form. The shim flips, but the binary's `extractDashR` keeps its existing internal shape (`-R <name> <cmd>...`) because the shim rewrites the user-facing form before the binary sees it. The trade-off: scripts and CI invoking the binary directly use `hop -R <name> <cmd>...` explicitly (and `hop <name> where` directly, since the binary's `where`-verb dispatch handles that); the user-facing repo-first form is the shell experience.
 11. **`hop open` was removed entirely; no replacement subcommand.** Once tool-form covers the use case generically, the dedicated `open` subcommand is redundant special-casing. Users invoke `hop <name> open` (Darwin) or `hop <name> xdg-open` (Linux) via the shim's tool-form sugar — or `hop <name> -R open` / `hop <name> -R xdg-open` directly. The `internal/platform` package was deleted with the subcommand: its only purpose was to abstract Darwin-vs-Linux for `hop open`. Cross-platform users who need portable scripts write their own one-liner.
 12. **`hop code` was removed in favor of `hop <name> code` via tool-form.** Once the shim dispatches `hop <name> <tool>`, a dedicated `code` subcommand is redundant — `hop dotfiles code` (shim) → `command hop -R dotfiles code` → execs `code` with cwd = dotfiles. This removes a top-level subcommand and the `code`-specific install-hint code path. There is no compatibility shim — this is a clean break, consistent with the v0.x policy of renaming/removing subcommands without aliases.
-13. **Tool-form is shim-only; the binary errors on `hop <name> <tool>` (Option X).** The binary could absorb tool-form (`hop -R <name> <tool>` is its internal shape), but doing so blurs the binary's role as a path-printer + error-emitter. Keeping tool-form shim-only preserves the binary's narrow contract and matches the existing posture for `cd` and bare-name. The binary's $2 dispatch is therefore three-way: `where` works (path printer), `cd` errors (shell-only hint), anything-else errors (tool-form-not-a-hop-verb hint). The error wording for tool-form (`hop: '<tool>' is not a hop verb (cd, where). For tool-form, install the shim: ..., or use: hop -R "<name>" <tool> [args...]`) tells the user both how to install the shim and how to invoke the binary directly, so the dispatcher's error path is itself a discovery surface.
+13. **Tool-form is shim-only; the binary errors on `hop <name> <tool>` (Option X).** The binary could absorb tool-form (`hop -R <name> <tool>` is its internal shape), but doing so blurs the binary's role as a path-printer + error-emitter. Keeping tool-form shim-only preserves the binary's narrow contract and matches the existing posture for `cd` and bare-name. The binary's $2 dispatch is therefore N-way: `where` works (path printer), `cd`/`w`/`s` error (shell-only hints), anything-else errors (tool-form-not-a-hop-verb hint). The error wording for tool-form (`hop: '<tool>' is not a hop verb (cd, where, w, s). For tool-form, install the shim: ..., or use: hop -R "<name>" <tool> [args...]`) tells the user both how to install the shim and how to invoke the binary directly, so the dispatcher's error path is itself a discovery surface.
+
+14. **Single-letter verbs `w` (tmux window) and `s` (tmux session) extend the reserved-word-at-$2 mechanism.** Single-letter verbs were chosen over wordlists (`window`, `session`) and over sigils (`:w`, `:s`) for three reasons: (a) collision risk with PATH binaries reachable via tool-form is near zero — no one runs `h <repo> w` expecting a binary called `w`; (b) single letters visually distinguish hop verbs from tool names at a glance; (c) they match the existing `h` / `hi` one-letter alias family in `shell-init`. The reserved-word-at-$2 mechanism (already established by `cd` and `where` after the v0.x grammar flip) means `w` and `s` slot in next to existing verbs without inventing a new dispatch rule. The "command 1st priority, system tool 2nd" requirement is satisfied because the reserved-word table at $2 checks before falling through to the tool-form `-R` rewrite. Both verbs are shim-only (binary can't mutate parent shell or tmux client state from a child process); the binary's `wHint`/`sHint` constants point unaware users at the shim install.
+
+   **Behavior matrix (four cells)**:
+
+   | Verb | Inside tmux (`$TMUX` set) | Outside tmux (`$TMUX` unset) |
+   |---|---|---|
+   | `w` | `tmux new-window -c <path> -n <name>` (focuses new window; window name defaults to repo) | Error: `hop: 'w' requires an active tmux session. Use 'h <name> s' to start one.` Exit 1. No tmux invocation. |
+   | `s` | `tmux has-session` existence check; on miss: `tmux new-session -d -s <session> -c <path> -n <window>` then `tmux switch-client -t <session>` (nested-tmux is forbidden, so detach + switch instead of attach); on hit: error `hop: tmux session '<name>' already exists. Use 'h <name> w' to add a window in the current session.` Exit 1. | `tmux has-session` existence check; on miss: `tmux new-session -s <session> -c <path> -n <window>` (foreground attach — the shell becomes the tmux client); on hit: same "already exists" error. |
+
+   - *Why*: User confirmed during `/fab-discuss`. Replaces a multi-step manual sequence (`tmux new-window -c "$(hop outbox where)"`) with a one-token gesture. The asymmetry between `w` and `s` (one positional vs. two) is intentional — each verb's first optional arg names the primary thing the verb creates (window for `w`, session for `s`), with `s`'s second optional arg naming the window. Defaults follow the same rule everywhere: when omitted, names equal the repo name. `s` errors instead of silently attaching when a session exists, preserving the `s` vs `w` semantic distinction (use `w` to add a window to an existing session).
+   - *Tmux runtime dependency*: Lazy — only invoked when the user actually runs `h <name> w` or `h <name> s` through the shim. The hop binary remains tmux-free; missing `tmux` surfaces via the shell's standard `command not found`. Matches the existing lazy-tool pattern (`fzf`, `git`, `brew`).
+   - *Rejected*:
+     - **Wordlists** (`window`/`session`) — more shadowing surface (every additional verb shadows another potential PATH name); typing cost; less consistent with one-letter alias family.
+     - **Sigil prefix** (`:w`/`:s`) — uglier; treats verbs and tools as disjoint rather than prioritized; doesn't match the existing `cd`/`where` precedent.
+     - **Binary-owned dispatch** — pulls binary into terminal-multiplexer territory (Constitution VI violation); can't mutate parent shell from a child process anyway.
+     - **Silent attach on existing-session** — surprising, conflates `s` with `w`. Errors instead, with hint pointing at the correct verb.
+     - **Nested tmux via `attach` from inside tmux** — tmux refuses; `switch-client` is the in-tmux idiom.
+     - **`-d` / detached as default** — defeats the ergonomic goal ("take me to the repo"). Add as a flag later if asked.
+     - **Auto-dedup of duplicate names** — premature; tmux allows duplicates and disambiguates by index.
+     - **Cross-multiplexer support** (screen, wezterm, kitty, iTerm) — `w` and `s` are explicitly tmux-bound. Demand for other multiplexers is a separate change with its own design.
+     - **Run-command-in-window** (`h <repo> w api -- vim`) and **pane-split verb** (`p`) — deferred until a real second use case arises.

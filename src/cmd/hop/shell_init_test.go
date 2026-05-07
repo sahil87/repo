@@ -377,6 +377,127 @@ func TestShellInitZshListsHelpAsSubcommand(t *testing.T) {
 	}
 }
 
+// TestShellInitZshEmitsWVerbBranch asserts the shim's repo-name branch routes
+// the explicit `w` verb (tmux-window) to `_hop_dispatch w "$1" "${@:3}"`.
+// The `w` branch sits between `where` and `-R` in the rule-5 dispatch ladder
+// (see TestShellInitZshVerbBranchOrder for the full chain order).
+func TestShellInitZshEmitsWVerbBranch(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `"$2" == "w"`) {
+		t.Fatalf("expected `\"$2\" == \"w\"` (w-verb branch test), got:\n%s", out)
+	}
+	if !strings.Contains(out, `_hop_dispatch w "$1" "${@:3}"`) {
+		t.Fatalf("expected `_hop_dispatch w \"$1\" \"${@:3}\"` (w-verb dispatch), got:\n%s", out)
+	}
+}
+
+// TestShellInitZshEmitsSVerbBranch asserts the shim's repo-name branch routes
+// the explicit `s` verb (tmux-session) to `_hop_dispatch s "$1" "${@:3}"`.
+func TestShellInitZshEmitsSVerbBranch(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `"$2" == "s"`) {
+		t.Fatalf("expected `\"$2\" == \"s\"` (s-verb branch test), got:\n%s", out)
+	}
+	if !strings.Contains(out, `_hop_dispatch s "$1" "${@:3}"`) {
+		t.Fatalf("expected `_hop_dispatch s \"$1\" \"${@:3}\"` (s-verb dispatch), got:\n%s", out)
+	}
+}
+
+// TestShellInitZshDispatchHasWArm asserts the emitted `_hop_dispatch` switch
+// has a `w)` arm that invokes `tmux new-window` (without `-d`, so the new
+// window is focused).
+func TestShellInitZshDispatchHasWArm(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "    w)") {
+		t.Fatalf("expected `w)` arm in `_hop_dispatch` switch, got:\n%s", out)
+	}
+	if !strings.Contains(out, "tmux new-window") {
+		t.Fatalf("expected `tmux new-window` invocation in `w)` arm, got:\n%s", out)
+	}
+}
+
+// TestShellInitZshDispatchHasSArm asserts the emitted `_hop_dispatch` switch
+// has an `s)` arm that invokes `tmux has-session` (existence check),
+// `tmux new-session` (creation), and `tmux switch-client` (in-tmux switch).
+func TestShellInitZshDispatchHasSArm(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "    s)") {
+		t.Fatalf("expected `s)` arm in `_hop_dispatch` switch, got:\n%s", out)
+	}
+	if !strings.Contains(out, "tmux has-session") {
+		t.Fatalf("expected `tmux has-session` (existence check) in `s)` arm, got:\n%s", out)
+	}
+	if !strings.Contains(out, "tmux new-session") {
+		t.Fatalf("expected `tmux new-session` in `s)` arm, got:\n%s", out)
+	}
+	if !strings.Contains(out, "tmux switch-client") {
+		t.Fatalf("expected `tmux switch-client` (in-tmux switch) in `s)` arm, got:\n%s", out)
+	}
+}
+
+// TestShellInitZshWErrorsOutsideTmux asserts the emitted `w)` arm checks
+// `$TMUX` and prints the "requires an active tmux session" error when unset.
+func TestShellInitZshWErrorsOutsideTmux(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `"$TMUX"`) {
+		t.Fatalf("expected `$TMUX` test in shim, got:\n%s", out)
+	}
+	if !strings.Contains(out, "requires an active tmux session") {
+		t.Fatalf("expected `requires an active tmux session` error string in `w)` arm, got:\n%s", out)
+	}
+}
+
+// TestShellInitZshSChecksSessionExists asserts the emitted `s)` arm prints
+// the "already exists" hint when `tmux has-session` succeeds.
+func TestShellInitZshSChecksSessionExists(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "already exists") {
+		t.Fatalf("expected `already exists` hint in `s)` arm (session-exists guard), got:\n%s", out)
+	}
+}
+
 func TestShellInitBashEmitsFunctionAndCompletion(t *testing.T) {
 	rootForCompletion = newRootCmd()
 	defer func() { rootForCompletion = nil }()
@@ -398,6 +519,15 @@ func TestShellInitBashEmitsFunctionAndCompletion(t *testing.T) {
 	}
 	if !strings.Contains(out, "__start_hop") {
 		t.Fatalf("expected cobra-generated `__start_hop` completion fn, got:\n%s", out)
+	}
+	// The w/s verb arms come from the same `posixInit` content shared with zsh,
+	// so bash output must include them too. This is a sanity guard: if the shim
+	// is ever split (zsh-specific vs bash-specific posixInit), this catches it.
+	if !strings.Contains(out, "    w)") {
+		t.Fatalf("expected `w)` arm in bash output (shared posixInit), got:\n%s", out)
+	}
+	if !strings.Contains(out, "    s)") {
+		t.Fatalf("expected `s)` arm in bash output (shared posixInit), got:\n%s", out)
 	}
 }
 

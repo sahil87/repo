@@ -45,7 +45,7 @@ Notes:
     ` + "`hop <name> where`" + ` for path resolution, which the binary handles directly).
   - On ambiguous or no-match queries, fzf opens prefilled with your query.
   - Grammar: first positional is a repo OR a subcommand (mutually exclusive). When it's
-    a repo, second positional is a verb (` + "`cd`, `where`" + `), ` + "`-R`" + `, or a tool name.
+    a repo, second positional is a verb (` + "`cd`, `where`, `w`, `s`" + `), ` + "`-R`" + `, or a tool name.
   - Config search order: $HOP_CONFIG, then $XDG_CONFIG_HOME/hop/hop.yaml, then $HOME/.config/hop/hop.yaml.`
 
 // bareNameHint is the exact stderr line printed when the binary is invoked
@@ -58,11 +58,21 @@ const bareNameHint = `hop: bare-name dispatch is shell-only. Add 'eval "$(hop sh
 // shell-only, error in the binary.
 const cdHint = `hop: 'cd' is shell-only. Add 'eval "$(hop shell-init zsh)"' to your zshrc, or use: cd "$(hop "<name>" where)"`
 
+// wHint is the exact stderr line printed when the binary is invoked as
+// `hop <name> w` (tmux-window verb at $2). Same shape as cdHint — shell-only,
+// error in the binary. The shim handles the actual tmux invocation.
+const wHint = `hop: 'w' is shell-only (tmux window). Add 'eval "$(hop shell-init zsh)"' to your zshrc and run inside a tmux session.`
+
+// sHint is the exact stderr line printed when the binary is invoked as
+// `hop <name> s` (tmux-session verb at $2). Same shape as cdHint — shell-only,
+// error in the binary. The shim handles the actual tmux invocation.
+const sHint = `hop: 's' is shell-only (tmux session). Add 'eval "$(hop shell-init zsh)"' to your zshrc.`
+
 // toolFormHintFmt is the format string for the tool-form error: when the
-// binary receives `hop <name> <tool>` (2 args, $2 is neither `where` nor `cd`
-// nor `-R`). Tool-form is shim-only — the binary errors with this hint.
+// binary receives `hop <name> <tool>` (2 args, $2 is neither `where`, `cd`,
+// `w`, `s`, nor `-R`). Tool-form is shim-only — the binary errors with this hint.
 // %s is replaced with args[1] (the would-be tool name).
-const toolFormHintFmt = `hop: '%s' is not a hop verb (cd, where). For tool-form, install the shim: eval "$(hop shell-init zsh)", or use: hop -R "<name>" <tool> [args...]`
+const toolFormHintFmt = `hop: '%s' is not a hop verb (cd, where, w, s). For tool-form, install the shim: eval "$(hop shell-init zsh)", or use: hop -R "<name>" <tool> [args...]`
 
 func newRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -76,6 +86,8 @@ func newRootCmd() *cobra.Command {
 		//   1 arg             → bare-name dispatch (shell-only) → error in binary
 		//   2 args, $2=where  → resolve $1 and print path
 		//   2 args, $2=cd     → cd-verb (shell-only) → error in binary
+		//   2 args, $2=w      → tmux-window verb (shell-only) → error in binary
+		//   2 args, $2=s      → tmux-session verb (shell-only) → error in binary
 		//   2 args, otherwise → tool-form (shim-only) → error in binary
 		Args:              cobra.MaximumNArgs(2),
 		ValidArgsFunction: completeRepoNames,
@@ -91,6 +103,10 @@ func newRootCmd() *cobra.Command {
 					return resolveAndPrint(cmd, args[0])
 				case "cd":
 					return &errExitCode{code: 2, msg: cdHint}
+				case "w":
+					return &errExitCode{code: 2, msg: wHint}
+				case "s":
+					return &errExitCode{code: 2, msg: sHint}
 				default:
 					return &errExitCode{code: 2, msg: fmt.Sprintf(toolFormHintFmt, args[1])}
 				}
