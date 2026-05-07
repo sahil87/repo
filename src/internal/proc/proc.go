@@ -35,6 +35,30 @@ func Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	return stdout.Bytes(), nil
 }
 
+// RunCapture is Run with an explicit working directory: cmd.Dir is set to dir
+// (equivalent to running `git -C dir ...` but driven via cmd.Dir rather than a
+// `-C` argument, so the subprocess sees the canonical cwd directly). Captures
+// stdout to bytes; stderr passes through to the parent. Used by internal/scan
+// for per-repo `git remote` / `git remote get-url` invocations.
+//
+// If the binary is not on PATH, the returned error is ErrNotFound. dir is
+// passed verbatim to exec — callers SHOULD validate it (e.g., via os.Stat)
+// before calling, per Constitution Principle I.
+func RunCapture(ctx context.Context, dir, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return stdout.Bytes(), err
+	}
+	return stdout.Bytes(), nil
+}
+
 // ExitCode reports the subprocess exit code carried by err. It returns (code, true)
 // when err wraps an *exec.ExitError (i.e., the subprocess ran and exited with a
 // non-zero status), and (0, false) otherwise (e.g., I/O error, ErrNotFound, nil).

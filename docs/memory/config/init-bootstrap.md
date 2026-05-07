@@ -14,7 +14,12 @@ How `hop config init` and `hop config where` behave. Implemented in `src/cmd/hop
    - Creates parent dir via `os.MkdirAll(dir, 0o755)` if absent.
    - Writes `starterContent` (embedded via `//go:embed starter.yaml`) with file mode **0644**.
 3. Stdout: `Created <path>`.
-4. Stderr: `Edit the file to add your repos. Tip: set $HOP_CONFIG in your shell rc to point at a version-tracked location (a git-tracked dotfile, Dropbox, etc.) so this config moves with you across machines.`
+4. Stderr (two lines):
+   ```
+   Edit the file to add your repos, or run `hop config scan <dir>` to populate from existing on-disk repos.
+   Tip: set $HOP_CONFIG in your shell rc to point at a version-tracked location (a git-tracked dotfile, Dropbox, etc.) so this config moves with you across machines.
+   ```
+   The first line surfaces `hop config scan` for onboarding discoverability — without it, scan is invisible to new users. The `Tip:` line is preserved verbatim from the pre-scan wording.
 5. Exit 0.
 
 The `0644` mode is intentional: the file contains repo paths and public git URLs — no credentials. Treating it as sensitive (0600) would be theater.
@@ -56,3 +61,8 @@ The starter parses cleanly under the new schema validator (verified by `TestStar
 Prints `config.ResolveWriteTarget()` to stdout. Exit 0 unless nothing resolves at all (no env vars, no `$HOME`). Never errors on missing file — it's a debug aid, not a load.
 
 Renamed from v0.0.1's `hop config path` for voice-fit consistency with the locator's `hop where`. Both `init` and `where` are exempt from the standard "load `hop.yaml` first" flow; they run cleanly even when no config exists yet.
+
+## Cross-references
+
+- Bootstrap-then-populate workflow (`hop config init` followed by `hop config scan <dir>`): [scan](scan.md)
+- Search order shared by `init`, `where`, and `scan`'s precondition check: [search-order](search-order.md)

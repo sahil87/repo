@@ -1,0 +1,44 @@
+id: ceh2
+name: 260506-ceh2-config-scan-populate-repos
+created: 2026-05-06T10:38:43Z
+created_by: sahil-weaver
+change_type: feat
+issues: []
+progress:
+    intake: done
+    spec: done
+    tasks: done
+    apply: done
+    review: done
+    hydrate: done
+    ship: done
+    review-pr: active
+checklist:
+    generated: true
+    path: checklist.md
+    completed: 0
+    total: 97
+confidence:
+    certain: 29
+    confident: 1
+    tentative: 0
+    unresolved: 0
+    score: 4.7
+    fuzzy: true
+    dimensions:
+        signal: 93.2
+        reversibility: 81.8
+        competence: 88.7
+        disambiguation: 90.0
+stage_metrics:
+    intake: {started_at: "2026-05-06T10:38:43Z", driver: fab-new, iterations: 1, completed_at: "2026-05-06T11:00:41Z"}
+    spec: {started_at: "2026-05-06T11:00:41Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-07T01:50:03Z"}
+    tasks: {started_at: "2026-05-07T01:50:03Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-07T01:56:51Z"}
+    apply: {started_at: "2026-05-07T01:56:51Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-07T02:38:37Z"}
+    review: {started_at: "2026-05-07T02:38:37Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-07T02:46:49Z"}
+    hydrate: {started_at: "2026-05-07T02:46:49Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-07T02:52:33Z"}
+    ship: {started_at: "2026-05-07T02:52:33Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-07T02:55:29Z"}
+    review-pr: {started_at: "2026-05-07T02:55:29Z", driver: git-pr, iterations: 1}
+prs:
+    - https://github.com/sahil87/hop/pull/13
+last_updated: 2026-05-07T02:55:29Z

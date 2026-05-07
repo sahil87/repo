@@ -21,6 +21,7 @@ Test files (`*_test.go`) MAY use `os/exec` directly — to spawn the built binar
 | Symbol | Signature |
 |---|---|
 | `Run(ctx, name, args...) ([]byte, error)` | Non-interactive. Captures stdout to bytes; stderr passes through to parent. |
+| `RunCapture(ctx, dir, name, args...) ([]byte, error)` | `Run` with an explicit `cmd.Dir`. Captures stdout, stderr passes through. Used by `internal/scan` for `git remote` / `git remote get-url` invocations scoped to a discovered repo's working tree (cmd.Dir is preferred over `git -C` so the subprocess sees the canonical cwd directly). |
 | `RunInteractive(ctx, stdin io.Reader, name, args...) (string, error)` | Pipes stdin, captures stdout to string; stderr passes through. Used for fzf. |
 | `RunForeground(ctx, dir, name, args...) (int, error)` | Runs a child with `cmd.Dir = dir` and stdin/stdout/stderr **inherited** from the parent. Returns the child's exit code on success (error nil); returns `(-1, ErrNotFound)` if the binary is missing; returns `(-1, err)` for other I/O / exec failures. Used by `hop -R` (and the shim's tool-form, which rewrites to `-R`). |
 | `var ErrNotFound` | Sentinel returned when the binary is not on PATH. Callers use `errors.Is(err, proc.ErrNotFound)` to produce install-hint messages. |
@@ -66,6 +67,17 @@ Formula name: **`sahil87/tap/hop` (fully qualified)** to dodge a name collision 
 - `ErrGroupNotFound` is a sentinel wrapped via `%w` when the named group is absent. Detect via `errors.Is(err, yamled.ErrGroupNotFound)`.
 
 Why a dedicated package separate from `internal/config`: `config` validates and consumes; `yamled` produces a node tree, navigates, mutates, writes. Different responsibilities — `config` is the schema validator; `yamled` is a node-level mutator. Either can be tested independently.
+
+## `internal/scan` — directory walk + repo classification
+
+`Walk(ctx, root, opts) ([]Found, []Skip, error)`:
+
+- Stack-based DFS with `(path, depth)` frames. Depth-bounded; symlinks followed with `(device, inode)` loop dedup (`syscall.Stat_t` keys). Each `Found.Path` is `filepath.EvalSymlinks`-resolved (canonical).
+- Classifies each candidate dir via first-match-wins (`classifyDir`): worktree (`.git` is a regular file) → bare repo (HEAD + config + objects/, no `.git`) → normal repo (`.git` is a directory) → plain dir (recurse). `ReasonSubmodule` is part of the public Skip enum but never emitted — the no-descent invariant ("never enqueue children of a registered repo") makes nested `.git` dirs unreachable through DFS.
+- All `git` invocations route through `Options.GitRunner`, which production binds to `internal/proc.RunCapture` (Constitution Principle I). Tests inject a fake `GitRunner` so no real `git` subprocess spawns. Each invocation gets a 5-second `context.WithTimeout`.
+- The package is **UI-free**: knows about repos and skips, knows nothing about groups, slugify, conflict resolution, YAML, or stderr UX. The CLI layer (`cmd/hop/config_scan.go`) handles those concerns.
+
+Why a dedicated package: discovery is non-trivial (DFS + inode dedup + classifier + git invocation), benefits from isolated unit tests with an injected `GitRunner`, and slots cleanly alongside `internal/yamled` and `internal/update` as a per-feature internal package. See [config/scan](../config/scan.md) for the per-rule details.
 
 ## What is NOT wrapped
 

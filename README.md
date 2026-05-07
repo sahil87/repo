@@ -56,7 +56,18 @@ hop config init
 hop config where   # show where it lives
 ```
 
-Edit it to list your repos. By default the file lives at `$XDG_CONFIG_HOME/hop/hop.yaml` (or `~/.config/hop/hop.yaml`). Set `$HOP_CONFIG` in your shell rc to point at a tracked location (Dropbox, a git-tracked dotfile, etc.) so the config moves with you.
+By default the file lives at `$XDG_CONFIG_HOME/hop/hop.yaml` (or `~/.config/hop/hop.yaml`). Set `$HOP_CONFIG` in your shell rc to point at a tracked location (Dropbox, a git-tracked dotfile, etc.) so the config moves with you.
+
+If you already have repos cloned somewhere, `hop config scan` populates `hop.yaml` from disk instead of asking you to type each URL by hand:
+
+```sh
+hop config scan ~/code              # preview: prints what it would write
+hop config scan ~/code --write      # merge the result into hop.yaml (comments preserved)
+```
+
+Scan walks the directory (default depth 3, `--depth N` to override), inspects each git repo's `origin` remote, and auto-derives groups: repos whose on-disk path matches the `<code_root>/<org>/<name>` convention land in `default`; repos in non-convention layouts get a group named after their parent directory. Worktrees, submodules, bare repos, and repos with no remote are skipped.
+
+Otherwise, edit `hop.yaml` by hand to list your repos.
 
 ## Quick tour
 
