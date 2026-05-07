@@ -9,6 +9,9 @@ project:
 source_paths:
     - cmd
     - internal
+true_impact_exclude:
+    - fab/
+    - docs/
 stage_directives:
     apply: []
     hydrate: []
