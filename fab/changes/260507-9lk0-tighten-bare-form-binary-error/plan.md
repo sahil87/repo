@@ -142,8 +142,8 @@
 
 - [ ] A-027 Subcommand at $1 wins over repo-name interpretation: `hop ls` (with a repo named `ls` in the fixture) routes to the `ls` subcommand. Existing `ls_test.go` covers this implicitly.
 - [ ] A-028 `hop config where` survives unchanged: `config_test.go` (or equivalent) still exercises the `config where` path.
-- [ ] A-029 Direct-binary `hop cd <name>` is rejected by cobra: cobra's "unknown command" error fires (no spec test required — cobra default behavior).
-- [ ] A-030 Direct-binary `hop where <name>` is rejected by cobra: same as A-029.
+- [ ] A-029 Direct-binary `hop cd <name>` (legacy form) errors with the tool-form hint: 2 positionals are accepted by `MaximumNArgs(2)`; `cd` is treated as a (non-existent) repo at $1; `<name>` falls into the 2-arg default branch in RunE → `fmt.Sprintf(toolFormHintFmt, "<name>")` to stderr, exit 2. Verified by `resolve_test.go::TestCdSubcommandRemoved`.
+- [ ] A-030 Direct-binary `hop where <name>` (legacy form) errors with the tool-form hint: same dispatch as A-029. Verified by `resolve_test.go::TestWhereSubcommandRemoved`.
 
 ### Edge Cases & Error Handling
 

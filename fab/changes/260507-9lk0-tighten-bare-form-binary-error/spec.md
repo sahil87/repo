@@ -42,19 +42,23 @@ The `hop` binary's root command SHALL accept up to two positional arguments. The
 
 The `hop cd <name>` and `hop where <name>` subcommand factories MUST be removed from the cobra command tree. The `cd` and `where` verbs SHALL exist only at `$2` in the repo-first form (`hop <name> cd`, `hop <name> where`). The `where` verb under the `config` namespace (`hop config where`) is unaffected — it is a different namespace and does not collide.
 
-#### Scenario: `hop cd <name>` rejected at the binary
+#### Scenario: `hop cd <name>` (legacy form) errors with the tool-form hint
 
 - **GIVEN** the user invokes the binary directly
 - **WHEN** they run `hop cd <name>`
-- **THEN** cobra rejects the invocation with `Error: unknown command "cd" for "hop"`
-- **AND** exit code is non-zero (cobra's default for unknown commands)
+- **THEN** the binary parses 2 positionals (`MaximumNArgs(2)` cap; `cd` is no longer a subcommand at $1, so it's treated as a repo name)
+- **AND** the `RunE` 2-arg default branch fires (because `args[1]` is the repo name, not `cd`/`where`/`-R`)
+- **AND** stderr is `fmt.Sprintf(toolFormHintFmt, "<name>")` — i.e., `hop: '<name>' is not a hop verb (cd, where). For tool-form, install the shim: ..., or use: hop -R "<name>" <tool> [args...]`
+- **AND** exit code is 2
+- **NOTE**: This is intentional behavior under the new grammar — there is no special-cased "unknown command" error for the legacy form. The tool-form hint surfaces the migration via the verbs list (`cd, where`).
 
-#### Scenario: `hop where <name>` rejected at the binary
+#### Scenario: `hop where <name>` (legacy form) errors with the tool-form hint
 
 - **GIVEN** the user invokes the binary directly
 - **WHEN** they run `hop where <name>`
-- **THEN** cobra rejects the invocation with `Error: unknown command "where" for "hop"`
-- **AND** exit code is non-zero
+- **THEN** same as the `cd` case: 2 positionals are accepted; `args[0] = "where"` is treated as a (non-existent) repo name; `args[1] = "<name>"` is the would-be verb; the `RunE` 2-arg default branch fires
+- **AND** stderr is the tool-form hint with `args[1]` interpolated
+- **AND** exit code is 2
 
 #### Scenario: `hop config where` survives unchanged
 

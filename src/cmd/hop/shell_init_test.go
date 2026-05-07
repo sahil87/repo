@@ -195,8 +195,9 @@ func TestShellInitZshDoesNotListCdOrWhereAsSubcommand(t *testing.T) {
 }
 
 // TestShellInitZshEmitsCdVerbBranch asserts the shim's repo-name branch
-// includes the explicit-`cd`-verb dispatch (`$2 == "cd"` → `_hop_dispatch cd "$1"`).
-// This is the 2-arg analog of bare-name dispatch.
+// includes the explicit-`cd`-verb dispatch routing through `_hop_dispatch cd "$1"`.
+// The verb branches share a `$2 == "cd" || $2 == "where"` guard with extra-args
+// forwarding to the binary; the inner cd arm calls `_hop_dispatch cd "$1"`.
 func TestShellInitZshEmitsCdVerbBranch(t *testing.T) {
 	rootForCompletion = newRootCmd()
 	defer func() { rootForCompletion = nil }()
@@ -206,15 +207,17 @@ func TestShellInitZshEmitsCdVerbBranch(t *testing.T) {
 		t.Fatalf("shell-init zsh: %v", err)
 	}
 	out := stdout.String()
-	if !strings.Contains(out, `elif [[ "$2" == "cd" ]]; then`) {
-		t.Fatalf("expected `elif [[ \"$2\" == \"cd\" ]]; then` (explicit cd verb branch), got:\n%s", out)
+	if !strings.Contains(out, `"$2" == "cd" || "$2" == "where"`) {
+		t.Fatalf("expected combined verb guard `\"$2\" == \"cd\" || \"$2\" == \"where\"`, got:\n%s", out)
+	}
+	if !strings.Contains(out, `_hop_dispatch cd "$1"`) {
+		t.Fatalf("expected `_hop_dispatch cd \"$1\"` (cd verb dispatch), got:\n%s", out)
 	}
 }
 
 // TestShellInitZshEmitsWhereVerbBranch asserts the shim's repo-name branch
-// includes the explicit-`where`-verb dispatch (`$2 == "where"` →
-// `command hop "$1" where`). This routes the user-facing `hop <name> where`
-// directly to the binary's $2-verb dispatch.
+// routes the explicit `where` verb to `command hop "$1" where` (the binary's
+// $2-verb dispatch).
 func TestShellInitZshEmitsWhereVerbBranch(t *testing.T) {
 	rootForCompletion = newRootCmd()
 	defer func() { rootForCompletion = nil }()
@@ -224,11 +227,30 @@ func TestShellInitZshEmitsWhereVerbBranch(t *testing.T) {
 		t.Fatalf("shell-init zsh: %v", err)
 	}
 	out := stdout.String()
-	if !strings.Contains(out, `elif [[ "$2" == "where" ]]; then`) {
-		t.Fatalf("expected `elif [[ \"$2\" == \"where\" ]]; then` (explicit where verb branch), got:\n%s", out)
-	}
 	if !strings.Contains(out, `command hop "$1" where`) {
 		t.Fatalf("expected `command hop \"$1\" where` (where-verb dispatch to binary), got:\n%s", out)
+	}
+}
+
+// TestShellInitZshVerbBranchForwardsExtraArgs asserts that when a verb at $2
+// (cd or where) is followed by extra args, the shim forwards the full argv to
+// the binary (`command hop "$@"`) so cobra's MaximumNArgs(2) raises an error
+// rather than silently dropping the extra args.
+func TestShellInitZshVerbBranchForwardsExtraArgs(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `if [[ $# -gt 2 ]]; then`) {
+		t.Fatalf("expected `if [[ $# -gt 2 ]]; then` (extra-args guard for verbs), got:\n%s", out)
+	}
+	// The body of the extra-args guard forwards to the binary verbatim.
+	if !strings.Contains(out, `command hop "$@"`) {
+		t.Fatalf("expected `command hop \"$@\"` forward when verb has extra args, got:\n%s", out)
 	}
 }
 

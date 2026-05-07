@@ -59,12 +59,20 @@ hop() {
       if [[ $# -eq 1 ]]; then
         # Bare-name dispatch: hop <name> -> cd into the repo (shorthand for hop <name> cd).
         _hop_dispatch cd "$1"
-      elif [[ "$2" == "cd" ]]; then
-        # Explicit cd verb: hop <name> cd -> cd into the repo.
-        _hop_dispatch cd "$1"
-      elif [[ "$2" == "where" ]]; then
-        # Explicit where verb: hop <name> where -> binary resolves and prints the path.
-        command hop "$1" where
+      elif [[ "$2" == "cd" || "$2" == "where" ]]; then
+        # Verb dispatch at $2. The verbs are 2-arg only — extra args (e.g.
+        # hop <name> cd extra) are forwarded to the binary so cobra's
+        # MaximumNArgs(2) rejects with the right error rather than silently
+        # dropping args.
+        if [[ $# -gt 2 ]]; then
+          command hop "$@"
+        elif [[ "$2" == "cd" ]]; then
+          # hop <name> cd -> cd into the repo (shim handles, parent shell mutates).
+          _hop_dispatch cd "$1"
+        else
+          # hop <name> where -> binary resolves and prints the path.
+          command hop "$1" where
+        fi
       elif [[ "$2" == "-R" ]]; then
         # Canonical exec form: hop <name> -R <cmd>... → command hop -R <name> <cmd>...
         # The shim flips the user-facing form to the binary's internal shape

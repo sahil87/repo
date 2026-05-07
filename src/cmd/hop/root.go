@@ -20,8 +20,9 @@ Usage:
   hop <name>                cd into the repo (shell function — needs ` + "`eval \"$(hop shell-init zsh)\"`" + `)
   hop <name> cd             same — explicit verb form
   hop <name> where          echo abs path of matching repo
-  hop <name> -R <cmd>...    run <cmd>... with cwd = <name>'s repo dir
-  hop <name> <tool>...      shim-only sugar for ` + "`hop <name> -R <tool> ...`" + ` (e.g., ` + "`hop dotfiles cursor`" + `)
+  hop <name> -R <cmd>...    shim-only — run <cmd>... with cwd = <name>'s repo dir
+  hop -R <name> <cmd>...    binary-direct exec form (also reached via the shim)
+  hop <name> <tool>...      shim-only sugar for ` + "`hop -R <name> <tool> ...`" + ` (e.g., ` + "`hop dotfiles cursor`" + `)
   hop clone <name>          git clone the repo if it isn't already on disk
   hop clone <url>           ad-hoc clone: clone the URL, register it in hop.yaml, print landed path
   hop clone --all           clone every repo from hop.yaml that isn't already on disk
@@ -38,6 +39,10 @@ Usage:
 Notes:
   - ` + "`hop <name>`" + ` and ` + "`hop <name> cd`" + ` require shell integration (a binary can't change
     its parent shell's cwd). Without it, use:  cd "$(hop <name> where)"
+  - The repo-first ` + "`hop <name> -R <cmd>...`" + ` and ` + "`hop <name> <tool>...`" + ` forms are shim-only
+    rewrites — the binary's ` + "`-R`" + ` parser expects ` + "`hop -R <name> <cmd>...`" + `. Scripts and CI
+    that bypass the shim must use the binary-direct form ` + "`hop -R <name> <cmd>...`" + ` (and
+    ` + "`hop <name> where`" + ` for path resolution, which the binary handles directly).
   - On ambiguous or no-match queries, fzf opens prefilled with your query.
   - Grammar: first positional is a repo OR a subcommand (mutually exclusive). When it's
     a repo, second positional is a verb (` + "`cd`, `where`" + `), ` + "`-R`" + `, or a tool name.
