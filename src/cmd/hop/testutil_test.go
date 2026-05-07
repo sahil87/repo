@@ -7,7 +7,25 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/sahil87/hop/internal/config"
 )
+
+// loadConfigForTest resolves $HOP_CONFIG via config.Resolve and parses it via
+// config.Load, fataling on failure. Used by tests that need direct access to
+// the parsed *config.Config (e.g., to exercise group-name predicates).
+func loadConfigForTest(t *testing.T) *config.Config {
+	t.Helper()
+	path, err := config.Resolve()
+	if err != nil {
+		t.Fatalf("config.Resolve: %v", err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	return cfg
+}
 
 // runArgs constructs a fresh root command, captures stdout/stderr buffers, executes
 // with the provided args, and returns the buffers and any error from cobra.

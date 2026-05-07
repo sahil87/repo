@@ -82,10 +82,13 @@ func TestSyncCobraRejectsTwoPositionals(t *testing.T) {
 }
 
 func TestMentionsConflictDetectsRebaseMarker(t *testing.T) {
-	if !mentionsConflict("error: could not apply 1234... CONFLICT (content)", nil) {
+	if !mentionsConflict("error: could not apply 1234... CONFLICT (content)", "", nil) {
 		t.Errorf("expected stdout CONFLICT to be detected")
 	}
-	if mentionsConflict("Already up to date.", nil) {
+	if !mentionsConflict("", "CONFLICT (content): Merge conflict in foo.txt", nil) {
+		t.Errorf("expected stderr CONFLICT to be detected (git emits CONFLICT on stderr)")
+	}
+	if mentionsConflict("Already up to date.", "", nil) {
 		t.Errorf("did not expect false positive on clean output")
 	}
 }

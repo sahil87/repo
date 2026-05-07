@@ -191,13 +191,39 @@ func TestResolveTargetsGroupNameWinsOverRepoSubstring(t *testing.T) {
 	}
 }
 
+func TestResolveTargetsEmptyGroupResolvesAsEmptyBatch(t *testing.T) {
+	// A group declared in hop.yaml with `urls:` null/empty must still be
+	// recognized as a group (rule 2), not fall through to repo-name matching.
+	yaml := `repos:
+  empty:
+    dir: /tmp/test-empty-group
+    urls:
+  populated:
+    dir: /tmp/test-empty-group-populated
+    urls:
+      - git@github.com:org/foo.git
+`
+	writeReposFixture(t, yaml)
+
+	rs, mode, err := resolveTargets("empty", false)
+	if err != nil {
+		t.Fatalf("resolveTargets empty: %v", err)
+	}
+	if mode != modeBatch {
+		t.Fatalf("expected modeBatch for empty group, got %v", mode)
+	}
+	if len(rs) != 0 {
+		t.Fatalf("expected 0 repos in empty batch, got %d (%v)", len(rs), rs)
+	}
+}
+
 func TestResolveTargetsGroupLookupIsCaseSensitive(t *testing.T) {
 	writeReposFixture(t, resolveTargetsYAML)
 
 	// "Default" (uppercase D) is not an exact match for "default"; rule 2
 	// fails, rule 3 falls through. With no substring repo match for
 	// "Default", resolveByName triggers fzf — which we want to avoid in tests.
-	// Instead, exercise the case-sensitivity by asserting hasGroupExact's
+	// Instead, exercise the case-sensitivity by asserting hasConfiguredGroup's
 	// behavior directly.
 	rs, _, err := resolveTargets("vendor", false)
 	if err != nil {
@@ -207,12 +233,13 @@ func TestResolveTargetsGroupLookupIsCaseSensitive(t *testing.T) {
 		t.Fatalf("sanity: expected 1 vendor repo, got %d", len(rs))
 	}
 	// Now verify that an uppercased query does NOT match the group via
-	// hasGroupExact directly (avoids fzf invocation).
-	if hasGroupExact(rs, "Vendor") {
-		t.Fatalf("hasGroupExact must be case-sensitive: 'Vendor' should not match group 'vendor'")
+	// hasConfiguredGroup directly (avoids fzf invocation).
+	cfg := loadConfigForTest(t)
+	if hasConfiguredGroup(cfg, "Vendor") {
+		t.Fatalf("hasConfiguredGroup must be case-sensitive: 'Vendor' should not match group 'vendor'")
 	}
-	if !hasGroupExact(rs, "vendor") {
-		t.Fatalf("hasGroupExact: 'vendor' should match group 'vendor'")
+	if !hasConfiguredGroup(cfg, "vendor") {
+		t.Fatalf("hasConfiguredGroup: 'vendor' should match group 'vendor'")
 	}
 }
 

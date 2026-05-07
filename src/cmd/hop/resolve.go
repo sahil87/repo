@@ -155,8 +155,9 @@ const (
 // Resolution rules (first match wins):
 //
 //  1. all == true  → return every repo from hop.yaml in source order; mode = batch.
-//  2. query exactly matches a group name (case-sensitive) → return every URL in
-//     that group resolved to a Repo; mode = batch.
+//  2. query exactly matches a configured group name (case-sensitive) → return
+//     every URL in that group resolved to a Repo; mode = batch. Empty groups
+//     (groups with no URLs in hop.yaml) match here and yield an empty batch.
 //  3. otherwise → fall through to resolveByName (case-insensitive substring on
 //     Name, with fzf for ambiguous/zero matches); mode = single.
 //
@@ -168,7 +169,18 @@ const (
 // Returns errFzfMissing/errFzfCancelled (via resolveByName), or any underlying
 // config-load error. Callers map errFzfMissing → fzfMissingHint + errSilent.
 func resolveTargets(query string, all bool) (repos.Repos, resolveMode, error) {
-	rs, err := loadRepos()
+	// Load the raw config so we can recognize group names that exist in
+	// hop.yaml even when their `urls:` list is null/empty (the projected
+	// Repos slice loses those because FromConfig only emits per-URL entries).
+	path, err := config.Resolve()
+	if err != nil {
+		return nil, modeSingle, err
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		return nil, modeSingle, err
+	}
+	rs, err := repos.FromConfig(cfg)
 	if err != nil {
 		return nil, modeSingle, err
 	}
@@ -177,10 +189,9 @@ func resolveTargets(query string, all bool) (repos.Repos, resolveMode, error) {
 		return rs, modeBatch, nil
 	}
 
-	// Rule 2: exact group-name match (case-sensitive). We re-derive the
-	// per-Group repo list from rs (already projected from the same Config) so
-	// we don't re-load YAML or duplicate FromConfig's path-resolution logic.
-	if hasGroupExact(rs, query) {
+	// Rule 2: exact group-name match against the configured group list (not
+	// the projected repos), so empty groups still resolve as a batch.
+	if hasConfiguredGroup(cfg, query) {
 		var batch repos.Repos
 		for _, r := range rs {
 			if r.Group == query {
@@ -198,15 +209,16 @@ func resolveTargets(query string, all bool) (repos.Repos, resolveMode, error) {
 	return repos.Repos{*repo}, modeSingle, nil
 }
 
-// hasGroupExact reports whether any repo in rs belongs to a group named exactly
-// query (case-sensitive). Matches `findGroup`'s case-sensitive contract from
-// clone.go and avoids a second config.Load round-trip.
-func hasGroupExact(rs repos.Repos, query string) bool {
-	if query == "" {
+// hasConfiguredGroup reports whether cfg defines a group named exactly query
+// (case-sensitive), regardless of whether that group has any URLs. This lets
+// `hop pull <empty-group>` / `hop sync <empty-group>` resolve as an empty
+// batch instead of falling through to single-repo name matching.
+func hasConfiguredGroup(cfg *config.Config, query string) bool {
+	if cfg == nil || query == "" {
 		return false
 	}
-	for _, r := range rs {
-		if r.Group == query {
+	for _, g := range cfg.Groups {
+		if g.Name == query {
 			return true
 		}
 	}

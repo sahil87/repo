@@ -60,7 +60,7 @@ The `--all` flag MUST be a boolean. No other flags are added in v1.
 
 - **GIVEN** the user invokes `hop pull` with no positional and no `--all`
 - **WHEN** the command runs
-- **THEN** stderr shows the cobra usage error
+- **THEN** stderr shows `hop pull: missing <name-or-group>. Pass a name, a group, or --all.`
 - **AND** exit code is 2
 
 #### Scenario: `--all` combined with positional is a usage error

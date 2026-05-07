@@ -79,40 +79,12 @@ func pullSingle(cmd *cobra.Command, r repos.Repo) error {
 	return nil
 }
 
-// pullBatch iterates targets sequentially in YAML source order, counts
-// outcomes, emits a summary line, and returns errSilent when any pull failed.
-// On `git` missing, it aborts immediately (no further repos attempted, no
-// summary line emitted) per spec assumption #17.
+// pullBatch iterates targets sequentially via runBatch, counting outcomes and
+// emitting `summary: pulled=N skipped=N failed=N` on stderr. Returns errSilent
+// when any pull failed. On `git` missing, runBatch aborts immediately (no
+// further repos attempted, no summary line emitted) per spec assumption #17.
 func pullBatch(cmd *cobra.Command, targets repos.Repos) error {
-	var pulled, skipped, failed int
-	for _, r := range targets {
-		state, err := cloneState(r.Path)
-		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "pull: %s ✗ %v\n", r.Name, err)
-			failed++
-			continue
-		}
-		if state != stateAlreadyCloned {
-			fmt.Fprintf(cmd.ErrOrStderr(), "skip: %s not cloned\n", r.Name)
-			skipped++
-			continue
-		}
-		ok, gitMissing, _ := pullOne(cmd, r)
-		if gitMissing {
-			fmt.Fprintln(cmd.ErrOrStderr(), gitMissingHint)
-			return errSilent
-		}
-		if ok {
-			pulled++
-		} else {
-			failed++
-		}
-	}
-	fmt.Fprintf(cmd.ErrOrStderr(), "summary: pulled=%d skipped=%d failed=%d\n", pulled, skipped, failed)
-	if failed > 0 {
-		return errSilent
-	}
-	return nil
+	return runBatch(cmd, targets, "pull", "pulled", pullOne)
 }
 
 // pullOne runs `git pull` in r.Path via proc.RunCapture with a 10-minute
