@@ -56,18 +56,18 @@ func TestCompletionReturnsAllNamesForShellFiltering(t *testing.T) {
 func TestCompletionForSubcommands(t *testing.T) {
 	writeReposFixture(t, completionYAML)
 
-	// where, cd, clone all share completeRepoNames; verify each surfaces
-	// repo names. clone uses completeCloneArg, which delegates to
-	// completeRepoNames for non-URL prefixes.
-	for _, sub := range []string{"where", "cd", "clone"} {
-		stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, sub, "")
-		if err != nil {
-			t.Fatalf("__complete %s: %v", sub, err)
-		}
-		out := stdout.String()
-		if !strings.Contains(out, "alpha") {
-			t.Fatalf("expected 'alpha' in `%s` completion, got:\n%s", sub, out)
-		}
+	// `clone` shares completeRepoNames via completeCloneArg (which delegates to
+	// completeRepoNames for non-URL prefixes). Verify it surfaces repo names.
+	// `where` and `cd` were removed as top-level subcommands in the repo-verb
+	// grammar flip — they're now $2 verbs, not $1 subcommands; tab completion
+	// at $2 is punted to a follow-up.
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "clone", "")
+	if err != nil {
+		t.Fatalf("__complete clone: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "alpha") {
+		t.Fatalf("expected 'alpha' in `clone` completion, got:\n%s", out)
 	}
 }
 
@@ -93,9 +93,9 @@ func TestCompletionMissingConfigIsSilent(t *testing.T) {
 	// A missing config must NOT surface an error during completion AND must
 	// not leak any positional candidates — tab-completion errors are
 	// user-hostile and stray candidates would confuse autocompletion.
-	// Use a subcommand (`where`) so there is no subcommand-list output to
+	// Use a subcommand (`clone`) so there is no subcommand-list output to
 	// confound the candidate-count assertion.
-	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "where", "")
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "clone", "")
 	if err != nil {
 		t.Fatalf("__complete with missing config returned error: %v", err)
 	}
@@ -128,13 +128,19 @@ func TestCompletionRootFiltersSubcommandCollisions(t *testing.T) {
 	// A repo named after a subcommand can never reach the bare-form resolver
 	// — cobra dispatches the first token to the subcommand. Advertising it
 	// from the root would be misleading.
+	//
+	// Note: `where` and `cd` are NOT in this filter list anymore — they were
+	// removed as top-level subcommands in the repo-verb grammar flip. A repo
+	// named `where` or `cd` now surfaces from root completion (and cobra
+	// routes `hop where` / `hop cd` to the new $1=repo, $2=anything-else
+	// dispatch in the root's RunE, where `where` and `cd` as $1 fall into the
+	// 1-arg bare-name case).
 	writeReposFixture(t, `repos:
   default:
     dir: /tmp/test-collision
     urls:
       - git@github.com:sahil87/alpha.git
       - git@github.com:sahil87/clone.git
-      - git@github.com:sahil87/where.git
 `)
 
 	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "")
@@ -147,12 +153,49 @@ func TestCompletionRootFiltersSubcommandCollisions(t *testing.T) {
 		if c == "alpha" {
 			foundAlpha = true
 		}
-		if c == "clone" || c == "where" {
+		if c == "clone" {
 			t.Fatalf("expected colliding name %q to be filtered from root completion candidates, got: %v", c, bare)
 		}
 	}
 	if !foundAlpha {
 		t.Fatalf("expected non-colliding 'alpha' in candidates, got: %v", bare)
+	}
+}
+
+// TestCompletionRootSurfacesRepoNamedWhereOrCd asserts that since the `hop where`
+// and `hop cd` subcommands were removed (replaced by the $2-verb grammar), repos
+// named `where` or `cd` are no longer filtered from root completion. Guards
+// against accidental re-introduction of these as subcommands or a hardcoded
+// filter entry.
+func TestCompletionRootSurfacesRepoNamedWhereOrCd(t *testing.T) {
+	writeReposFixture(t, `repos:
+  default:
+    dir: /tmp/test-where-cd-uncollided
+    urls:
+      - git@github.com:sahil87/alpha.git
+      - git@github.com:sahil87/where.git
+      - git@github.com:sahil87/cd.git
+`)
+
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "")
+	if err != nil {
+		t.Fatalf("__complete: %v", err)
+	}
+	bare := candidatesFrom(stdout.String())
+	foundWhere, foundCd := false, false
+	for _, c := range bare {
+		if c == "where" {
+			foundWhere = true
+		}
+		if c == "cd" {
+			foundCd = true
+		}
+	}
+	if !foundWhere {
+		t.Errorf("expected `where` repo to surface (cd/where are no longer subcommands), got: %v", bare)
+	}
+	if !foundCd {
+		t.Errorf("expected `cd` repo to surface, got: %v", bare)
 	}
 }
 

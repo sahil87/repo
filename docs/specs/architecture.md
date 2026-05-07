@@ -16,9 +16,8 @@ hop/
 │   ├── cmd/
 │   │   └── hop/
 │   │       ├── main.go                   # entrypoint + translateExit + extractDashR + runDashR
-│   │       ├── root.go                   # cobra root + version handling + rootLong help text
-│   │       ├── where.go                  # `hop where`, bare `hop <name>`, shared resolver helpers
-│   │       ├── cd.go                     # `hop cd` (binary form: prints hint + exit 2)
+│   │       ├── root.go                   # cobra root + version + rootLong + repo-verb dispatch (RunE) + cdHint/bareNameHint/toolFormHintFmt constants
+│   │       ├── resolve.go                # bare `hop <name>` resolver helpers (loadRepos, resolveByName, resolveOne, resolveAndPrint, buildPickerLines) — called by root's RunE for `hop <name> where`
 │   │       ├── clone.go                  # `hop clone` (single, --all, ad-hoc URL)
 │   │       ├── ls.go                     # `hop ls`
 │   │       ├── shell_init.go             # `hop shell-init <shell>` (zsh + bash, shared posixInit)
@@ -106,9 +105,8 @@ Cobra command definitions, flag parsing, exit code handling, the `-R` argv split
 | File | Exports / contents |
 |---|---|
 | `main.go` | `func main()` — builds rootCmd, sets `Version`, captures `rootForCompletion`, runs `extractDashR` (pre-cobra), calls `Execute()`. Defines `translateExit` (sole stderr/exit path), `extractDashR` (argv splitter for `-R`), `runDashR` (resolve + `proc.RunForeground`), and the typed sentinels (`errSilent`, `errFzfMissing`, `errFzfCancelled`, `errExitCode`). Holds the package-level `var version = "dev"` (overridden via `-ldflags "-X main.version=…"`). |
-| `root.go` | `func newRootCmd() *cobra.Command` — root command with `RunE` for bare-form (no subcommand or single positional). Sets `Version`, `SilenceUsage = true`, `SilenceErrors = true`. Holds `rootLong` (the help-text Usage table and Notes block) and the `AddCommand` wiring. |
-| `where.go` | `func newWhereCmd() *cobra.Command` — `hop where <name>`. Hosts shared helpers: `loadRepos()`, `resolveByName(query)`, `resolveOne(cmd, query)`, `resolveAndPrint(cmd, query)`, `buildPickerLines(rs)`. Also defines `fzfMissingHint`. |
-| `cd.go` | `func newCdCmd() *cobra.Command` — prints `cdHint` to stderr and returns `errExitCode{code: 2}`. |
+| `root.go` | `func newRootCmd() *cobra.Command` — root command with `Args: cobra.MaximumNArgs(2)` and a `RunE` that implements the repo-verb grammar at $1/$2 (0 args → bare picker; 1 arg → bareNameHint exit-2; 2 args → switch on $2: `where` resolves, `cd` errors with `cdHint`, anything-else errors with `fmt.Sprintf(toolFormHintFmt, $2)`). Sets `Version`, `SilenceUsage = true`, `SilenceErrors = true`. Holds `rootLong` (the help-text Usage table and Notes block), the three hint constants (`bareNameHint`, `cdHint`, `toolFormHintFmt`), and the `AddCommand` wiring. The `cd` and `where` subcommand factories were removed in the repo-verb grammar flip — verbs live at $2, not $1. |
+| `resolve.go` | Resolution helpers shared across the root command and `clone`. Exports: `loadRepos()`, `resolveByName(query)`, `resolveOne(cmd, query)`, `resolveAndPrint(cmd, query)`, `buildPickerLines(rs)`. Also defines `fzfMissingHint`, `errFzfCancelled`, `errFzfMissing`, `errSilent`. Renamed from `where.go` when the `hop where <name>` subcommand was removed (the file no longer hosts a cobra factory — just the helpers). |
 | `clone.go` | `func newCloneCmd() *cobra.Command` — handles three forms: `<name>`, `--all`, `<url>`. URL detection via `looksLikeURL`. Holds `cloneTimeout` (10 minutes), `gitMissingHint`. URL form delegates the YAML write to `internal/yamled.AppendURL`. |
 | `ls.go` | `func newLsCmd() *cobra.Command` — `cobra.NoArgs`. |
 | `shell_init.go` | `func newShellInitCmd() *cobra.Command`. Emits the shared `posixInit` raw-string constant (defines `hop()`, `_hop_dispatch()`, `h()`, `hi()`; tool-form dispatch built in) followed by cobra-generated completion: `rootForCompletion.GenZshCompletion(out)` + `compdef _hop h hi` for zsh, `rootForCompletion.GenBashCompletionV2(out, true)` + `complete -o default -F __start_hop h hi` for bash. |
@@ -211,7 +209,7 @@ The entire git surface is `git clone <url> <dest>` (in single, `--all`, and ad-h
 
 The grouped-schema rename introduced two primitives that other operations build on:
 
-- **`hop where <name>`** — path resolver. Stdin/stdout-friendly: `cd "$(hop where outbox)"` works as a shell composition. The bare form `hop <name>` does the same thing.
+- **`hop <name> where`** — path resolver. Stdin/stdout-friendly: `cd "$(hop outbox where)"` works as a shell composition. The repo-verb grammar puts the repo first, the verb second; the bare `hop <name>` (1 arg) is the shim-only shorthand for `hop <name> cd`, not for the path-printer.
 - **`hop <name> -R <cmd>...`** — exec-in-context. Repo-scoped: run a child command with cwd set to the resolved repo dir, without leaving the parent shell's cwd changed. Spelled `-R` (not `-C` like `git -C` / `make -C`) because hop is **repo-scoped**, not arbitrary-directory-scoped — the resolution path goes through `resolveByName` which only resolves repos in `hop.yaml`. Shim-only user-facing form; the shim rewrites to the binary's internal `command hop -R <name> <cmd>...` shape.
 - **`hop <name> <tool> [args...]`** — shim-only tool-form sugar. Rewrites to `command hop -R <name> <tool> [args...]`. Lives in `shell_init.go::posixInit`, NOT the binary. See [cli-surface.md](cli-surface.md#hop-name-tool-shim-sugar) for the resolution ladder.
 

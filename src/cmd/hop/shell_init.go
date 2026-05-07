@@ -11,24 +11,28 @@ import (
 // Both shells understand `[[ ]]`, `${@:2}` slicing, and `local`. The completion
 // suffix (cobra-generated zsh or bash completion) is appended per-shell at the end.
 //
-// Resolution order in the hop() function (5-step ladder):
+// Resolution order in the hop() function (5-step ladder, first match wins):
 //
 //  1. No args                                           → bare picker
 //  2. $1 is __complete*                                 → forward to binary (cobra completion)
-//  3. $1 is a known subcommand                          → _hop_dispatch
+//  3. $1 is a known subcommand (no `cd`/`where` —       → _hop_dispatch
+//     those are now $2 verbs, not $1 subcommands)
 //  4. $1 is a flag                                      → forward to binary
-//  5. otherwise ($1 is treated as a repo name):
+//  5. otherwise ($1 is treated as a repo name) — dispatch on $2:
 //       $# == 1                                         → _hop_dispatch cd "$1" (bare-name → cd)
-//       $2 == "-R"                                      → command hop -R "$1" "${@:3}" (canonical exec form)
+//       $# >= 2 and $2 == "cd"                          → _hop_dispatch cd "$1" (explicit cd verb)
+//       $# >= 2 and $2 == "where"                       → command hop "$1" where (binary handles)
+//       $# >= 2 and $2 == "-R"                          → command hop -R "$1" "${@:3}" (canonical exec form)
 //       otherwise                                       → command hop -R "$1" "$2" "${@:3}" (tool-form sugar)
 //
 // The shim does NOT inspect PATH for $1 or $2 — the grammar is "subcommand
-// xor repo" in $1, and $2 is either `-R` or a tool name. Missing tools surface
-// via the binary's `hop: -R: '<cmd>' not found.` error. The shim rewrites the
-// user-facing `hop <name> -R <cmd>...` form to `command hop -R <name> <cmd>...`
-// so the binary's extractDashR continues to see the existing internal shape.
+// xor repo" in $1, and $2 is either a verb (`cd`, `where`), `-R`, or a tool name.
+// Missing tools surface via the binary's `hop: -R: '<cmd>' not found.` error.
+// The shim rewrites the user-facing `hop <name> -R <cmd>...` form to
+// `command hop -R <name> <cmd>...` so the binary's extractDashR continues to
+// see the existing internal shape.
 const posixInit = `# hop shell integration — emit via: eval "$(hop shell-init <shell>)"
-# Installs: hop function (with bare-name dispatch + tool-form), h alias, hi alias, completion.
+# Installs: hop function (with bare-name dispatch + verb dispatch + tool-form), h alias, hi alias, completion.
 
 hop() {
   if [[ $# -eq 0 ]]; then
@@ -43,17 +47,32 @@ hop() {
       # __complete through the bare-name dispatcher and treat it as a repo name.
       command hop "$@"
       ;;
-    cd|clone|where|ls|shell-init|config|update|help|--help|-h|--version|completion)
+    clone|ls|shell-init|config|update|help|--help|-h|--version|completion)
       _hop_dispatch "$@"
       ;;
     -*)
       command hop "$@"
       ;;
     *)
-      # $1 is a repo name (the grammar is "subcommand xor repo" — never a tool).
+      # $1 is a repo name (the grammar is "subcommand xor repo" — never a tool,
+      # never a verb at $1). Dispatch on $2.
       if [[ $# -eq 1 ]]; then
-        # Bare-name dispatch: hop <name> → cd into the repo.
+        # Bare-name dispatch: hop <name> -> cd into the repo (shorthand for hop <name> cd).
         _hop_dispatch cd "$1"
+      elif [[ "$2" == "cd" || "$2" == "where" ]]; then
+        # Verb dispatch at $2. The verbs are 2-arg only — extra args (e.g.
+        # hop <name> cd extra) are forwarded to the binary so cobra's
+        # MaximumNArgs(2) rejects with the right error rather than silently
+        # dropping args.
+        if [[ $# -gt 2 ]]; then
+          command hop "$@"
+        elif [[ "$2" == "cd" ]]; then
+          # hop <name> cd -> cd into the repo (shim handles, parent shell mutates).
+          _hop_dispatch cd "$1"
+        else
+          # hop <name> where -> binary resolves and prints the path.
+          command hop "$1" where
+        fi
       elif [[ "$2" == "-R" ]]; then
         # Canonical exec form: hop <name> -R <cmd>... → command hop -R <name> <cmd>...
         # The shim flips the user-facing form to the binary's internal shape
@@ -71,12 +90,10 @@ hop() {
 _hop_dispatch() {
   case "$1" in
     cd)
-      if [[ -z "$2" ]]; then
-        command hop cd
-        return $?
-      fi
+      # Callers always pass $2 (the repo name) — both the 1-arg bare-name branch
+      # and the 2-arg explicit-cd branch in hop() pass "$1" as the single argument.
       local target
-      target="$(command hop where "$2")" || return $?
+      target="$(command hop "$2" where)" || return $?
       cd -- "$target"
       ;;
     clone)

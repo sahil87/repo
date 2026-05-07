@@ -128,7 +128,7 @@ func resolveOne(cmd *cobra.Command, query string) (*repos.Repo, error) {
 }
 
 // resolveAndPrint resolves a single repo via resolveOne and prints its absolute path to stdout.
-// Used by `hop <name>` (root bare form) and `hop where <name>`.
+// Used by the bare-form root command and the `hop <name> where` two-arg dispatch.
 func resolveAndPrint(cmd *cobra.Command, query string) error {
 	repo, err := resolveOne(cmd, query)
 	if err != nil {
@@ -136,16 +136,4 @@ func resolveAndPrint(cmd *cobra.Command, query string) error {
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), repo.Path)
 	return nil
-}
-
-func newWhereCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:               "where <name>",
-		Short:             "echo absolute path of matching repo",
-		Args:              cobra.ExactArgs(1),
-		ValidArgsFunction: completeRepoNames,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return resolveAndPrint(cmd, args[0])
-		},
-	}
 }

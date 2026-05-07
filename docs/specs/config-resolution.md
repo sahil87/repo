@@ -248,7 +248,7 @@ The starter parses cleanly under the schema validator (verified by `TestStarterP
 
 ## `hop config where`
 
-Print the resolved config write target on stdout. Renamed from v0.0.1's `hop config path` for voice-fit consistency with `hop where`.
+Print the resolved config write target on stdout. Renamed from v0.0.1's `hop config path` for voice-fit consistency with the `where` verb (used as `hop <name> where` at the top level and `hop config where` here).
 
 ### Behavior
 

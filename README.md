@@ -73,7 +73,7 @@ Otherwise, edit `hop.yaml` by hand to list your repos.
 
 ```sh
 hop                       # fzf picker over all repos; prints selection's path
-hop where outbox          # resolve "outbox" to its absolute path
+hop outbox where          # resolve "outbox" to its absolute path
 hop ls                    # list every repo (name + path)
 h outbox                  # cd into outbox (single-letter alias + bare-name dispatch)
 hop outbox git status     # tool-form: run `git status` inside outbox; cwd unchanged

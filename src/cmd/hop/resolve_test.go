@@ -16,60 +16,42 @@ const singleRepoYAML = `repos:
       - git@github.com:sahil87/hop.git
 `
 
-func TestWhereExactMatch(t *testing.T) {
-	writeReposFixture(t, singleRepoYAML)
-
-	stdout, _, err := runArgs(t, "where", "hop")
-	if err != nil {
-		t.Fatalf("where hop: %v", err)
-	}
-	got := strings.TrimSpace(stdout.String())
-	if got != "/tmp/test-repos/hop" {
-		t.Fatalf("expected /tmp/test-repos/hop, got %q", got)
-	}
-}
-
-func TestBareSingleArgDelegatesToWhere(t *testing.T) {
-	writeReposFixture(t, singleRepoYAML)
-
-	stdout, _, err := runArgs(t, "hop")
-	if err != nil {
-		t.Fatalf("bare hop: %v", err)
-	}
-	got := strings.TrimSpace(stdout.String())
-	if got != "/tmp/test-repos/hop" {
-		t.Fatalf("expected /tmp/test-repos/hop, got %q", got)
-	}
-}
-
-func TestWhereRequiresArg(t *testing.T) {
-	writeReposFixture(t, singleRepoYAML)
-
-	_, _, err := runArgs(t, "where")
-	if err == nil {
-		t.Fatalf("expected error from `where` with no args")
-	}
-}
-
-func TestWhereConfigMissingError(t *testing.T) {
-	clearConfigEnv(t)
-	t.Setenv("HOP_CONFIG", "/this/does/not/exist.yaml")
-
-	_, _, err := runArgs(t, "where", "hop")
-	if err == nil {
-		t.Fatalf("expected error for missing $HOP_CONFIG target")
-	}
-	if !strings.Contains(err.Error(), "$HOP_CONFIG points to") {
-		t.Fatalf("expected hard-error message, got %q", err.Error())
-	}
-}
-
 func TestPathSubcommandRemoved(t *testing.T) {
 	writeReposFixture(t, singleRepoYAML)
 
 	_, _, err := runArgs(t, "path", "hop")
 	if err == nil {
 		t.Fatalf("expected error for removed `path` subcommand")
+	}
+}
+
+func TestWhereSubcommandRemoved(t *testing.T) {
+	writeReposFixture(t, singleRepoYAML)
+
+	// `hop where <name>` was removed in favor of `hop <name> where` (repo-verb grammar).
+	// The legacy 2-arg form `hop where hop` is now interpreted as $1="where" (treated
+	// as a repo name since `where` is no longer a known subcommand) and $2="hop"
+	// (which is neither `cd`, `where`, nor `-R`), so RunE's tool-form branch fires
+	// with the "not a hop verb" hint.
+	_, _, err := runArgs(t, "where", "hop")
+	if err == nil {
+		t.Fatalf("expected error for removed `where` subcommand form")
+	}
+	if !strings.Contains(err.Error(), "is not a hop verb") {
+		t.Fatalf("expected tool-form-hint error, got %q (type %T)", err.Error(), err)
+	}
+}
+
+func TestCdSubcommandRemoved(t *testing.T) {
+	writeReposFixture(t, singleRepoYAML)
+
+	// `hop cd <name>` was removed. Same grammar — $1=cd, $2=hop, otherwise → tool-form hint.
+	_, _, err := runArgs(t, "cd", "hop")
+	if err == nil {
+		t.Fatalf("expected error for removed `cd` subcommand form")
+	}
+	if !strings.Contains(err.Error(), "is not a hop verb") {
+		t.Fatalf("expected tool-form-hint error, got %q", err.Error())
 	}
 }
 

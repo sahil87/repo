@@ -49,7 +49,8 @@ func TestIntegrationVersion(t *testing.T) {
 
 func TestIntegrationCdHint(t *testing.T) {
 	bin := buildBinary(t)
-	cmd := exec.Command(bin, "cd", "anything")
+	// Repo-verb grammar: `hop <name> cd` (2 args, $2=cd) is the new error path.
+	cmd := exec.Command(bin, "anything", "cd")
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected non-zero exit, got nil err. output: %s", out)
@@ -66,6 +67,10 @@ func TestIntegrationCdHint(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "hop shell-init zsh") {
 		t.Fatalf("expected hint to reference hop shell-init zsh, got: %s", out)
+	}
+	// Pin the new repo-first fallback example.
+	if !strings.Contains(string(out), `cd "$(hop "<name>" where)"`) {
+		t.Fatalf("expected hint to use new `cd \"$(hop \"<name>\" where)\"` fallback, got: %s", out)
 	}
 }
 
@@ -85,12 +90,12 @@ func TestIntegrationWhereAndLs(t *testing.T) {
 		t.Fatalf("setup: %v", err)
 	}
 
-	// `hop where alpha`
-	cmd := exec.Command(bin, "where", "alpha")
+	// `hop alpha where` — repo-verb grammar (replaces v0.x `hop where alpha`).
+	cmd := exec.Command(bin, "alpha", "where")
 	cmd.Env = append(os.Environ(), "HOP_CONFIG="+yaml)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("hop where alpha: %v\noutput: %s", err, out)
+		t.Fatalf("hop alpha where: %v\noutput: %s", err, out)
 	}
 	if got := strings.TrimSpace(string(out)); got != "/tmp/integration-test/alpha" {
 		t.Fatalf("expected /tmp/integration-test/alpha, got %q", got)
@@ -391,13 +396,14 @@ func TestIntegrationShellInitBashSourceable(t *testing.T) {
 		t.Fatalf("setup: %v", err)
 	}
 
-	// Eval the shim, then call hop where (a known-subcommand path), and
-	// verify the function-wrapped call resolves correctly. Use --noprofile
-	// --norc to isolate from the user's bashrc and PATH-prepend the dir
-	// containing the freshly-built binary so `command hop` resolves to it.
+	// Eval the shim, then call `hop <name> where` (the new $2-verb form), and
+	// verify the function-wrapped call resolves correctly. The shim's $2 == where
+	// branch routes this to `command hop "<name>" where`. Use --noprofile --norc
+	// to isolate from the user's bashrc and PATH-prepend the dir containing the
+	// freshly-built binary so `command hop` resolves to it.
 	binDir := filepath.Dir(bin)
 	script := `eval "$(hop shell-init bash)" 2>/dev/null
-hop where probe`
+hop probe where`
 	cmd := exec.Command(bashPath, "--noprofile", "--norc", "-c", script)
 	cmd.Env = append(os.Environ(),
 		"HOP_CONFIG="+yaml,
@@ -405,7 +411,7 @@ hop where probe`
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("bash -c '<shim>; hop where probe': %v\noutput: %s", err, out)
+		t.Fatalf("bash -c '<shim>; hop probe where': %v\noutput: %s", err, out)
 	}
 	want := filepath.Join(dir, "probe")
 	if got := strings.TrimSpace(string(out)); got != want {

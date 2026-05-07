@@ -1,0 +1,25 @@
+{"action":"enter","driver":"fab-new","event":"stage-transition","stage":"intake","ts":"2026-05-07T07:33:15Z"}
+{"args":"tighten bare-form: binary errors on hop \u003cname\u003e (1 arg), shim cd's. Enforce rule that any hop \u003csubform\u003e either errors in binary or works in both. Mirror hop cd pattern. Fix hop -h drift, add config scan to Usage, update spec Design Decision #2, update memory in hydrate, check README. Change type: refactor.","cmd":"fab-new","event":"command","ts":"2026-05-07T07:33:15Z"}
+{"delta":"+2.5","event":"confidence","score":2.5,"trigger":"calc-score","ts":"2026-05-07T07:34:57Z"}
+{"delta":"+0.0","event":"confidence","score":2.5,"trigger":"calc-score","ts":"2026-05-07T07:35:08Z"}
+{"delta":"-2.5","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-07T07:44:00Z"}
+{"delta":"+0.0","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-07T07:44:05Z"}
+{"delta":"+0.0","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-07T07:47:50Z"}
+{"delta":"+0.0","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-07T07:48:06Z"}
+{"delta":"+0.0","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-07T07:48:12Z"}
+{"delta":"+0.0","event":"confidence","score":0,"trigger":"calc-score","ts":"2026-05-07T07:48:20Z"}
+{"delta":"+0.2","event":"confidence","score":0.2,"trigger":"calc-score","ts":"2026-05-07T07:48:49Z"}
+{"delta":"+0.0","event":"confidence","score":0.2,"trigger":"calc-score","ts":"2026-05-07T07:48:53Z"}
+{"delta":"+4.8","event":"confidence","score":5,"trigger":"calc-score","ts":"2026-05-07T08:00:30Z"}
+{"delta":"+0.0","event":"confidence","score":5,"trigger":"calc-score","ts":"2026-05-07T08:00:33Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"spec","ts":"2026-05-07T08:07:00Z"}
+{"cmd":"fab-fff","event":"command","ts":"2026-05-07T08:07:00Z"}
+{"delta":"+0.0","event":"confidence","score":5,"trigger":"calc-score","ts":"2026-05-07T08:11:18Z"}
+{"delta":"+0.0","event":"confidence","score":5,"trigger":"calc-score","ts":"2026-05-07T08:11:23Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"apply","ts":"2026-05-07T08:12:18Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"review","ts":"2026-05-07T08:23:35Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"hydrate","ts":"2026-05-07T08:29:17Z"}
+{"event":"review","result":"passed","ts":"2026-05-07T08:29:17Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"ship","ts":"2026-05-07T08:32:17Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"review-pr","ts":"2026-05-07T08:47:35Z"}
+{"delta":"+0.0","event":"confidence","score":5,"trigger":"calc-score","ts":"2026-05-07T08:55:17Z"}

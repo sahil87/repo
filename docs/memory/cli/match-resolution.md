@@ -1,6 +1,6 @@
 # Match Resolution
 
-Algorithm shared by every subcommand that takes a `<name>` argument (`hop`, `hop where`, `hop cd`, `hop clone`, `hop -R`). Implemented in `src/cmd/hop/where.go::resolveByName` and `src/internal/repos/repos.go::MatchOne`.
+Algorithm shared by every form that takes a `<name>` argument (`hop` bare picker, `hop <name> where`, `hop <name> cd` via the shim's `_hop_dispatch cd` → `command hop "$2" where`, `hop clone`, `hop -R`). Implemented in `src/cmd/hop/resolve.go::resolveByName` and `src/internal/repos/repos.go::MatchOne`.
 
 ## Algorithm
 
@@ -14,7 +14,7 @@ Algorithm shared by every subcommand that takes a `<name>` argument (`hop`, `hop
 
 ## Group disambiguation in the picker
 
-`buildPickerLines` (in `src/cmd/hop/where.go`) computes a count of how many repos share each `Name`. When `nameCount[r.Name] > 1`, the displayed first column is `<name> [<group>]` rather than just `<name>`. When the name is unique across groups, the suffix is omitted to keep picker lines short.
+`buildPickerLines` (in `src/cmd/hop/resolve.go`) computes a count of how many repos share each `Name`. When `nameCount[r.Name] > 1`, the displayed first column is `<name> [<group>]` rather than just `<name>`. When the name is unique across groups, the suffix is omitted to keep picker lines short.
 
 > **Limitation**: Two URLs in the *same* group whose derived `Name` collides still render an identical first column. Cross-group collisions are handled; intra-group collisions are not. (See backlog `[qwrd]`.)
 

@@ -93,7 +93,7 @@ Per Constitution Principle IV ("Wrap, Don't Reinvent") — wrap external tools, 
 
 The change introduced two primitives that other operations build on:
 
-- **`hop where <name>`** — path resolver. Stdin/stdout-friendly: `cd "$(hop where outbox)"` works as a shell composition.
+- **`hop <name> where`** — path resolver. Stdin/stdout-friendly: `cd "$(hop outbox where)"` works as a shell composition. The repo-verb grammar puts the repo first; the v0.x top-level `hop where <name>` was removed.
 - **`hop <name> -R <cmd>...`** — exec-in-context. Repo-scoped: run a child command with cwd set to the resolved repo dir, without leaving the parent shell's cwd changed. The shim's `hop <name> <tool>` tool-form sugar rewrites to this. The shim flips the user-facing form to the binary's internal `hop -R <name> <cmd>...` shape so `extractDashR` (in `cmd/hop/main.go`) is unchanged.
 
 Future verbs (`sync`, `autosync`, `features`) build on these rather than each one re-implementing path resolution and exec.

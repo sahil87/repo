@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
@@ -11,33 +13,56 @@ Getting started:
   2. Edit it to list your repos (each entry: name + git URL + parent dir).
   3. Optional: set $HOP_CONFIG in your shell rc to point at a tracked file
      (git-tracked dotfile, Dropbox, etc.) so it follows you across machines.
+  4. For interactive use, install the shim: eval "$(hop shell-init zsh)"
 
 Usage:
-  hop <name>             echo abs path of matching repo
-  hop where <name>       same, explicit form
-  hop cd <name>          cd into the repo (shell function — needs ` + "`eval \"$(hop shell-init zsh)\"`" + `)
-  hop clone <name>       git clone the repo if it isn't already on disk
-  hop clone <url>        ad-hoc clone: clone the URL, register it in hop.yaml, print landed path
-  hop clone --all        clone every repo from hop.yaml that isn't already on disk
-  hop ls                 list all repos
-  hop shell-init <shell> emit shell integration (zsh or bash). Use: eval "$(hop shell-init zsh)"
-  hop config init        bootstrap a starter hop.yaml
-  hop config where       print the resolved hop.yaml path
-  hop update             self-update the hop binary via Homebrew
-  hop <name> -R <cmd>... run <cmd>... with the working directory set to <name>'s repo dir
-  hop <name> <tool>...   shim-only sugar for ` + "`hop <name> -R <tool> ...`" + ` (e.g., ` + "`hop dotfiles cursor`" + `)
-  hop                    fzf picker, print selection
-  hop clone              fzf picker, then clone if missing
-  hop -h | --help        show this help
-  hop -v | --version     print version
+  hop                       fzf picker, print selection
+  hop <name>                cd into the repo (shell function — needs ` + "`eval \"$(hop shell-init zsh)\"`" + `)
+  hop <name> cd             same — explicit verb form
+  hop <name> where          echo abs path of matching repo
+  hop <name> -R <cmd>...    shim-only — run <cmd>... with cwd = <name>'s repo dir
+  hop -R <name> <cmd>...    binary-direct exec form (also reached via the shim)
+  hop <name> <tool>...      shim-only sugar for ` + "`hop -R <name> <tool> ...`" + ` (e.g., ` + "`hop dotfiles cursor`" + `)
+  hop clone <name>          git clone the repo if it isn't already on disk
+  hop clone <url>           ad-hoc clone: clone the URL, register it in hop.yaml, print landed path
+  hop clone --all           clone every repo from hop.yaml that isn't already on disk
+  hop clone                 fzf picker, then clone if missing
+  hop ls                    list all repos
+  hop shell-init <shell>    emit shell integration (zsh or bash). Use: eval "$(hop shell-init zsh)"
+  hop config init           bootstrap a starter hop.yaml
+  hop config where          print the resolved hop.yaml path
+  hop config scan <dir>     scan a directory for git repos and populate hop.yaml
+  hop update                self-update the hop binary via Homebrew
+  hop -h | --help           show this help
+  hop -v | --version        print version
 
 Notes:
-  - ` + "`hop cd`" + ` requires the shell integration (a binary can't change its parent shell's cwd).
-    Without it, use:  cd "$(hop where <name>)"
+  - ` + "`hop <name>`" + ` and ` + "`hop <name> cd`" + ` require shell integration (a binary can't change
+    its parent shell's cwd). Without it, use:  cd "$(hop <name> where)"
+  - The repo-first ` + "`hop <name> -R <cmd>...`" + ` and ` + "`hop <name> <tool>...`" + ` forms are shim-only
+    rewrites — the binary's ` + "`-R`" + ` parser expects ` + "`hop -R <name> <cmd>...`" + `. Scripts and CI
+    that bypass the shim must use the binary-direct form ` + "`hop -R <name> <cmd>...`" + ` (and
+    ` + "`hop <name> where`" + ` for path resolution, which the binary handles directly).
   - On ambiguous or no-match queries, fzf opens prefilled with your query.
-  - The shim's ` + "`hop <name> <tool>`" + ` and ` + "`hop <name> -R <cmd>...`" + ` forms run a tool inside a repo.
-    The repo name always comes first.
+  - Grammar: first positional is a repo OR a subcommand (mutually exclusive). When it's
+    a repo, second positional is a verb (` + "`cd`, `where`" + `), ` + "`-R`" + `, or a tool name.
   - Config search order: $HOP_CONFIG, then $XDG_CONFIG_HOME/hop/hop.yaml, then $HOME/.config/hop/hop.yaml.`
+
+// bareNameHint is the exact stderr line printed when the binary is invoked
+// with a single positional (the bare-name `hop <name>` shorthand for `hop <name> cd`).
+// Both forms are shell-only — the shim runs `_hop_dispatch cd "$1"`; the binary errors.
+const bareNameHint = `hop: bare-name dispatch is shell-only. Add 'eval "$(hop shell-init zsh)"' to your zshrc, or use: hop "<name>" where`
+
+// cdHint is the exact stderr line printed when the binary is invoked as
+// `hop <name> cd` (explicit cd verb at $2). Same shape as bareNameHint —
+// shell-only, error in the binary.
+const cdHint = `hop: 'cd' is shell-only. Add 'eval "$(hop shell-init zsh)"' to your zshrc, or use: cd "$(hop "<name>" where)"`
+
+// toolFormHintFmt is the format string for the tool-form error: when the
+// binary receives `hop <name> <tool>` (2 args, $2 is neither `where` nor `cd`
+// nor `-R`). Tool-form is shim-only — the binary errors with this hint.
+// %s is replaced with args[1] (the would-be tool name).
+const toolFormHintFmt = `hop: '%s' is not a hop verb (cd, where). For tool-form, install the shim: eval "$(hop shell-init zsh)", or use: hop -R "<name>" <tool> [args...]`
 
 func newRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -46,21 +71,36 @@ func newRootCmd() *cobra.Command {
 		Long:          rootLong,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		// Bare-form: 0 args → fzf picker; 1 arg → resolve and print path.
-		Args:              cobra.MaximumNArgs(1),
+		// Repo-verb grammar:
+		//   0 args            → bare picker
+		//   1 arg             → bare-name dispatch (shell-only) → error in binary
+		//   2 args, $2=where  → resolve $1 and print path
+		//   2 args, $2=cd     → cd-verb (shell-only) → error in binary
+		//   2 args, otherwise → tool-form (shim-only) → error in binary
+		Args:              cobra.MaximumNArgs(2),
 		ValidArgsFunction: completeRepoNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			query := ""
-			if len(args) == 1 {
-				query = args[0]
+			switch len(args) {
+			case 0:
+				return resolveAndPrint(cmd, "")
+			case 1:
+				return &errExitCode{code: 2, msg: bareNameHint}
+			case 2:
+				switch args[1] {
+				case "where":
+					return resolveAndPrint(cmd, args[0])
+				case "cd":
+					return &errExitCode{code: 2, msg: cdHint}
+				default:
+					return &errExitCode{code: 2, msg: fmt.Sprintf(toolFormHintFmt, args[1])}
+				}
 			}
-			return resolveAndPrint(cmd, query)
+			// Unreachable: cobra.MaximumNArgs(2) blocks 3+ args before RunE.
+			return nil
 		},
 	}
 
 	cmd.AddCommand(
-		newWhereCmd(),
-		newCdCmd(),
 		newCloneCmd(),
 		newLsCmd(),
 		newShellInitCmd(),
