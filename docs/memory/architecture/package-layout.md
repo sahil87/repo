@@ -15,7 +15,8 @@ src/
 │   ├── cd.go                     # one file per subcommand
 │   ├── clone.go, ls.go
 │   ├── shell_init.go             # posixInit (shared zsh+bash) + cobra GenZshCompletion / GenBashCompletionV2 at runtime
-│   ├── config.go                 # config + nested init/where subcommands
+│   ├── config.go                 # config + nested init/where/scan subcommand factories
+│   ├── config_scan.go            # `hop config scan` RunE + slugify, conflict resolution, summary emission
 │   ├── *_test.go                 # adjacent unit tests
 │   ├── dashr_test.go             # extractDashR unit tests
 │   ├── integration_test.go       # builds the binary and exercises it end-to-end
@@ -30,14 +31,17 @@ src/
     ├── repos/                    # in-memory Repo model + match
     │   ├── repos.go              # FromConfig, MatchOne, ExpandDir, DeriveName, DeriveOrg
     │   └── repos_test.go
-    ├── yamled/                   # comment-preserving YAML node-level edits (NEW)
-    │   ├── yamled.go             # AppendURL, ErrGroupNotFound, atomic write
+    ├── yamled/                   # comment-preserving YAML node-level edits
+    │   ├── yamled.go             # AppendURL, MergeScan, RenderScan, ScanPlan, InventedGroup, ErrGroupNotFound, atomic write
     │   └── yamled_test.go
+    ├── scan/                     # DFS walk + repo classification for `hop config scan`
+    │   ├── scan.go               # Walk, Found, Skip, Options, GitRunner; closed Reason enum; (dev,inode) loop dedup
+    │   └── scan_test.go
     ├── fzf/                      # fzf wrapper
     │   ├── fzf.go
     │   └── fzf_test.go
     ├── proc/                     # centralized exec.CommandContext
-    │   ├── proc.go               # Run, RunInteractive, RunForeground, ExitCode, ErrNotFound
+    │   ├── proc.go               # Run, RunCapture, RunInteractive, RunForeground, ExitCode, ErrNotFound
     │   └── proc_test.go
     └── update/                   # self-update via Homebrew
         ├── update.go             # Run(version), brew detect/index/info/upgrade
@@ -88,7 +92,32 @@ var ErrGroupNotFound = errors.New("yamled: group not found")
 
 Errors are wrapped fmt.Errorf strings; missing-group is additionally wrapped via `%w` with `ErrGroupNotFound` so callers can detect via `errors.Is`.
 
+## `internal/scan`
+
+Owns the directory walk and repo classification for `hop config scan`. UI-free: knows how to recognize git working trees (vs worktrees, submodules, bare repos, no-remote repos) and how to follow symlinks safely with `(dev, inode)` loop dedup; does NOT know about groups, slugify, conflict resolution, YAML rendering, or stderr UX (those live in the CLI / yamled layers).
+
+API:
+
+```go
+func Walk(ctx context.Context, root string, opts Options) ([]Found, []Skip, error)
+
+type Found struct { Path, URL string }              // canonical path + remote URL
+type Skip struct { Path, Reason string }            // closed reason set
+type Options struct { Depth int; GitRunner GitRunner }
+type GitRunner func(ctx, dir, args ...string) ([]byte, error)
+
+const (
+    ReasonNoRemote  = "no remote"
+    ReasonBareRepo  = "bare repo"
+    ReasonWorktree  = "worktree"
+    ReasonSubmodule = "submodule"  // reserved; never emitted by Walk (no-descent invariant suffices)
+)
+```
+
+`Walk` performs a stack-based DFS, classifies each candidate via first-match-wins rules, and registers found repos by invoking `git remote` + `git remote get-url` through `Options.GitRunner` (production binds `internal/proc.RunCapture`). Tests inject a fake `GitRunner` so no real `git` subprocess spawns. Discovery order is DFS lexical (deterministic for reproducible test fixtures and slug-tie tiebreaking). See [config/scan](../config/scan.md) for the classification rules and the submodule-handling rationale.
+
 ## Cross-references
 
-- Wrapper boundaries (`internal/proc`, `internal/fzf`, `internal/yamled` separation): [wrapper-boundaries](wrapper-boundaries.md)
+- Wrapper boundaries (`internal/proc`, `internal/fzf`, `internal/yamled`, `internal/scan` separation): [wrapper-boundaries](wrapper-boundaries.md)
+- Scan command behavior, classification rules, group assignment: [config/scan](../config/scan.md)
 - Build pipeline: [build/local](../build/local.md)

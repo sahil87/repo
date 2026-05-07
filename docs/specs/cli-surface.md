@@ -19,6 +19,7 @@
 | `hop shell-init <shell>` | `zsh` or `bash` (required) | Emit shell function wrapper + cobra-generated completion to stdout | 0 success, 2 unsupported shell |
 | `hop config init` | (none) | Bootstrap a starter `hop.yaml` at the resolved location | 0 written, 1 file exists, 2 write error |
 | `hop config where` | (none) | Print the resolved config path on stdout. Renamed from v0.0.1's `config path`. | 0 resolved, 1 unresolvable |
+| `hop config scan <dir>` | exactly 1 (directory) | Walk `<dir>` (default `--depth 3`), discover git repos via stat + `git remote`, and emit a merged `hop.yaml` to stdout (default) or merge in place via `--write` (atomic, comment-preserving). Auto-derives groups: convention-match repos go to `default`; non-convention repos land in invented map-shaped groups keyed off the parent dir basename. | 0 success (incl. zero repos found); 1 missing `hop.yaml` / git missing / write failure; 2 usage error (missing arg, dir validation, `--depth < 1`) |
 | `hop update` | (none) | Self-update the `hop` binary via Homebrew. No-op (with hint) when the binary was not installed via brew. | 0 success, 1 brew failure |
 | `hop -h \| --help \| help` | (none) | Print help text on stdout | 0 |
 | `hop -v \| --version` | (none) | Print version string on stdout | 0 |
@@ -332,6 +333,42 @@ Version comparison MUST normalize the leading `v` — the binary reports version
 > **THEN** stderr shows the failure reason
 > **AND** exit code is 1
 
+#### `hop config scan <dir>` — populate `hop.yaml` from on-disk repos
+
+`hop config scan` walks `<dir>` (default `--depth 3`, inclusive), discovers git repositories via stat + `git remote`, derives groups from the on-disk layout (convention-match → `default`; non-convention → invented map-shaped group keyed off the parent dir basename), and emits a merged `hop.yaml` to stdout (default) or merges in place via `--write` (atomic, comment-preserving). All `git` invocations route through `internal/proc.RunCapture` with a 5-second per-call `context.WithTimeout`. Walk symlinks are followed with `(dev, inode)` loop dedup. Implementation: `src/cmd/hop/config.go::newConfigScanCmd` + helpers in `src/cmd/hop/config_scan.go`; the walker lives in `src/internal/scan/` and the YAML merge in `src/internal/yamled/MergeScan` + `RenderScan`.
+
+> **GIVEN** `hop.yaml` has `code_root: ~/code` and `~/code/sahil87/hop/.git` exists with `git remote get-url origin` returning `git@github.com:sahil87/hop.git`
+> **WHEN** I run `hop config scan ~/code`
+> **THEN** the URL lands in the `default` flat group in the rendered YAML
+> **AND** stderr summarizes `matched convention (default): 1`
+> **AND** exit code is 0
+
+> **GIVEN** the same `hop.yaml` and a non-convention repo at `~/vendor/forks/tool/.git` with URL `git@github.com:other/tool.git`
+> **WHEN** I run `hop config scan ~/vendor`
+> **THEN** the rendered YAML contains an invented `forks:` group with `dir: ~/vendor/forks` and the URL under `urls:`
+> **AND** stderr summarizes `invented groups: 1 (forks)`
+
+> **GIVEN** `~/work` is a symlink to `~/Volumes/Mac/work` (a real directory containing repos)
+> **WHEN** I run `hop config scan ~/work`
+> **THEN** `EvalSymlinks` resolves the argument and the walk proceeds against the canonical target
+> **AND** each `Found.Path` is the canonical (resolved) path
+
+> **GIVEN** `~/code/a/b/c/d/.git` exists at depth 4 from `~/code`
+> **WHEN** I run `hop config scan ~/code --depth 3`
+> **THEN** that repo is NOT in the rendered YAML (depth bound is inclusive at 3)
+
+> **GIVEN** `~/code/scratch/.git` exists and `git remote` returns empty
+> **WHEN** I run `hop config scan ~/code`
+> **THEN** the repo is skipped with reason `no remote`
+> **AND** stderr's skipped breakdown counts it
+> **AND** the URL is NOT rendered into the YAML
+
+> **GIVEN** no `hop.yaml` exists at the resolved path (and `$HOP_CONFIG` is unset)
+> **WHEN** I run `hop config scan ~/code`
+> **THEN** stderr shows `hop config scan: no hop.yaml found at <ResolveWriteTarget>.` followed by `Run 'hop config init' first, then re-run scan.`
+> **AND** exit code is 1
+> **AND** no walk is performed (no `git` invocations)
+
 ### External Tool Availability
 
 External tools (`fzf`, `git`, `<cmd>` for `-R`) are checked **lazily** — only when the subcommand actually needs them. Subcommands that resolve without an external tool MUST NOT preemptively check or fail.
@@ -339,7 +376,7 @@ External tools (`fzf`, `git`, `<cmd>` for `-R`) are checked **lazily** — only 
 | Tool | Required by | Behavior if missing |
 |---|---|---|
 | `fzf` | `hop`, `hop <name>` (when match is ambiguous), `hop where` (ambiguous), `hop -R` (ambiguous), `hop clone <name>` (ambiguous) | Print to stderr: `hop: fzf is not installed. Install it: brew install fzf (macOS) or apt install fzf (Debian).` Exit 1. |
-| `git` | `hop clone` (any form) | Print to stderr: `hop: git is not installed.` Exit 1. |
+| `git` | `hop clone` (any form); `hop config scan <dir>` (only when the walk finds a `.git` candidate — empty trees succeed without `git`) | Print to stderr: `hop: git is not installed.` Exit 1. |
 | `<cmd>` | `hop <name> -R <cmd>...` (and the shim's `hop <name> <tool>` sugar that rewrites to it) | Print to stderr: `hop: -R: '<cmd>' not found.` Exit 1. |
 | `brew` | `hop update` (when installed via brew) | Print to stderr: `hop update: brew not found on PATH.` Exit 1. |
 

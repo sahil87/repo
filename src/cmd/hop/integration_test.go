@@ -171,6 +171,196 @@ func TestIntegrationDashRNoCommand(t *testing.T) {
 	}
 }
 
+// writeFakeGitShim builds a single-shot fake `git` shell script that returns
+// canned `remote` / `remote get-url <name>` output keyed by the cwd ($PWD).
+// The script is created in a fresh dir which the caller prepends to PATH so
+// the real git is shadowed.
+//
+// Returns the dir containing the shim (caller prepends to PATH).
+func writeFakeGitShim(t *testing.T, urlByDir map[string]string) string {
+	t.Helper()
+	binDir := t.TempDir()
+	gitPath := filepath.Join(binDir, "git")
+
+	var sb strings.Builder
+	sb.WriteString("#!/usr/bin/env bash\n")
+	sb.WriteString("# fake git for integration test — driven by $PWD\n")
+	sb.WriteString("dir=\"$PWD\"\n")
+	sb.WriteString("if [[ \"$1\" == \"remote\" && \"$#\" -eq 1 ]]; then\n")
+	for d := range urlByDir {
+		sb.WriteString("  if [[ \"$dir\" == \"" + d + "\" ]]; then echo origin; exit 0; fi\n")
+	}
+	sb.WriteString("  exit 0\n")
+	sb.WriteString("fi\n")
+	sb.WriteString("if [[ \"$1\" == \"remote\" && \"$2\" == \"get-url\" && \"$3\" == \"origin\" ]]; then\n")
+	for d, u := range urlByDir {
+		sb.WriteString("  if [[ \"$dir\" == \"" + d + "\" ]]; then echo \"" + u + "\"; exit 0; fi\n")
+	}
+	sb.WriteString("  exit 1\n")
+	sb.WriteString("fi\n")
+	sb.WriteString("exit 0\n")
+
+	if err := os.WriteFile(gitPath, []byte(sb.String()), 0o755); err != nil {
+		t.Fatalf("write fake git: %v", err)
+	}
+	return binDir
+}
+
+// TestIntegrationConfigScanPrintMode builds the binary, synthesizes a tree
+// containing convention-match and non-convention repos plus a worktree and a
+// bare repo, and asserts both stdout YAML shape and stderr summary lines.
+// `git` is shadowed by the fake shim in writeFakeGitShim so the test is
+// deterministic across machines.
+func TestIntegrationConfigScanPrintMode(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash required for fake git shim")
+	}
+
+	bin := buildBinary(t)
+	home := t.TempDir()
+	hopYaml := filepath.Join(home, ".config", "hop", "hop.yaml")
+	if err := os.MkdirAll(filepath.Dir(hopYaml), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	original := "config:\n  code_root: ~/code\nrepos:\n  default: []\n"
+	if err := os.WriteFile(hopYaml, []byte(original), 0o644); err != nil {
+		t.Fatalf("write yaml: %v", err)
+	}
+
+	scanRoot := filepath.Join(home, "code")
+	conv := filepath.Join(scanRoot, "sahil87", "hop")
+	nonConv := filepath.Join(home, "vendor", "forks", "tool")
+	worktree := filepath.Join(scanRoot, "wt-feature")
+	bare := filepath.Join(scanRoot, "mirror.git")
+
+	for _, d := range []string{conv, nonConv} {
+		if err := os.MkdirAll(filepath.Join(d, ".git"), 0o755); err != nil {
+			t.Fatalf("mkdir repo: %v", err)
+		}
+	}
+	// Worktree: directory with `.git` as a regular file.
+	if err := os.MkdirAll(worktree, 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(worktree, ".git"), []byte("gitdir: /elsewhere\n"), 0o644); err != nil {
+		t.Fatalf("write worktree marker: %v", err)
+	}
+	// Bare layout.
+	if err := os.MkdirAll(filepath.Join(bare, "objects"), 0o755); err != nil {
+		t.Fatalf("mkdir bare: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bare, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
+		t.Fatalf("write bare HEAD: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bare, "config"), []byte("[core]\n"), 0o644); err != nil {
+		t.Fatalf("write bare config: %v", err)
+	}
+
+	canonConv, _ := filepath.EvalSymlinks(conv)
+	canonNonConv, _ := filepath.EvalSymlinks(nonConv)
+	binDir := writeFakeGitShim(t, map[string]string{
+		canonConv:    "git@github.com:sahil87/hop.git",
+		canonNonConv: "git@github.com:other/tool.git",
+	})
+
+	// Run scan in print mode against ~/code (convention root).
+	cmd := exec.Command(bin, "config", "scan", scanRoot)
+	cmd.Env = append(os.Environ(),
+		"HOME="+home,
+		"HOP_CONFIG="+hopYaml,
+		"PATH="+binDir+":"+os.Getenv("PATH"),
+	)
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("config scan: %v\nstderr: %s", err, stderr.String())
+	}
+
+	gotOut := stdout.String()
+	gotErr := stderr.String()
+
+	// Header line.
+	wantDate := time.Now().UTC().Format("2006-01-02")
+	if !strings.Contains(gotOut, wantDate+" (UTC).") {
+		t.Errorf("missing UTC header date %q; stdout=%q", wantDate, gotOut)
+	}
+	// Convention-match URL is in the rendered YAML.
+	if !strings.Contains(gotOut, "git@github.com:sahil87/hop.git") {
+		t.Errorf("convention URL missing in stdout; stdout=%q", gotOut)
+	}
+	// Worktree skip in stderr summary.
+	if !strings.Contains(gotErr, "1 worktree") {
+		t.Errorf("worktree skip missing in summary; stderr=%q", gotErr)
+	}
+	if !strings.Contains(gotErr, "1 bare repo") {
+		t.Errorf("bare-repo skip missing in summary; stderr=%q", gotErr)
+	}
+	// Original file unchanged in print mode.
+	got, err := os.ReadFile(hopYaml)
+	if err != nil {
+		t.Fatalf("read yaml: %v", err)
+	}
+	if string(got) != original {
+		t.Errorf("hop.yaml mutated in print mode:\nbefore:\n%s\nafter:\n%s", original, got)
+	}
+}
+
+func TestIntegrationConfigScanWriteMode(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash required for fake git shim")
+	}
+
+	bin := buildBinary(t)
+	home := t.TempDir()
+	hopYaml := filepath.Join(home, ".config", "hop", "hop.yaml")
+	if err := os.MkdirAll(filepath.Dir(hopYaml), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	original := "# top comment preserved\nconfig:\n  code_root: ~/code\nrepos:\n  default: []\n"
+	if err := os.WriteFile(hopYaml, []byte(original), 0o644); err != nil {
+		t.Fatalf("write yaml: %v", err)
+	}
+
+	scanRoot := filepath.Join(home, "code")
+	conv := filepath.Join(scanRoot, "sahil87", "hop")
+	if err := os.MkdirAll(filepath.Join(conv, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	canonConv, _ := filepath.EvalSymlinks(conv)
+	binDir := writeFakeGitShim(t, map[string]string{
+		canonConv: "git@github.com:sahil87/hop.git",
+	})
+
+	cmd := exec.Command(bin, "config", "scan", scanRoot, "--write")
+	cmd.Env = append(os.Environ(),
+		"HOME="+home,
+		"HOP_CONFIG="+hopYaml,
+		"PATH="+binDir+":"+os.Getenv("PATH"),
+	)
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("config scan --write: %v\nstderr: %s", err, stderr.String())
+	}
+
+	if stdout.Len() != 0 {
+		t.Errorf("write mode stdout should be empty; got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "wrote: "+hopYaml) {
+		t.Errorf("missing 'wrote:' trailer; stderr=%q", stderr.String())
+	}
+	got, _ := os.ReadFile(hopYaml)
+	gotStr := string(got)
+	if !strings.Contains(gotStr, "git@github.com:sahil87/hop.git") {
+		t.Errorf("URL not merged; got:\n%s", gotStr)
+	}
+	if !strings.Contains(gotStr, "# top comment preserved") {
+		t.Errorf("comments lost; got:\n%s", gotStr)
+	}
+}
+
 // TestIntegrationShellInitBashSourceable spawns a real bash, evals the
 // shim script emitted by `hop shell-init bash`, and exercises one dispatch
 // path (bare-name resolution via `command hop where`). This catches syntax,
