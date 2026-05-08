@@ -473,12 +473,13 @@ func TestShellInitUnsupportedShell(t *testing.T) {
 	}
 }
 
-// TestShellInitScopesHopWrapperToHopFunction asserts the shim sets
-// HOP_WRAPPER=1 only within the hop() function (via `local -x`), not at the
-// top level. This ensures hi() — which deliberately bypasses the shim — does
-// not inherit HOP_WRAPPER, so the binary can reliably detect direct
-// invocation and emit the "Open here" no-shim hint.
-func TestShellInitScopesHopWrapperToHopFunction(t *testing.T) {
+// TestShellInitOmitsHopWrapper asserts the shim no longer sets HOP_WRAPPER.
+// The previous open-verb implementation set HOP_WRAPPER=1 to let the binary
+// detect shim presence and gate a no-shim hint. After the cd-handoff moved
+// to a temp file (WT_CD_FILE), the binary is a transparent passthrough and
+// HOP_WRAPPER is no longer load-bearing — verifying it's gone guards
+// against accidental reintroduction during refactors.
+func TestShellInitOmitsHopWrapper(t *testing.T) {
 	rootForCompletion = newRootCmd()
 	defer func() { rootForCompletion = nil }()
 
@@ -487,11 +488,8 @@ func TestShellInitScopesHopWrapperToHopFunction(t *testing.T) {
 		t.Fatalf("shell-init zsh: %v", err)
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "local -x HOP_WRAPPER=1") {
-		t.Fatalf("expected `local -x HOP_WRAPPER=1` inside hop(), got:\n%s", out)
-	}
-	if strings.Contains(out, "export HOP_WRAPPER=1") {
-		t.Fatalf("expected NO top-level `export HOP_WRAPPER=1` (would leak to hi()), got:\n%s", out)
+	if strings.Contains(out, "HOP_WRAPPER") {
+		t.Fatalf("expected no `HOP_WRAPPER` reference (no longer load-bearing), got:\n%s", out)
 	}
 }
 
@@ -516,12 +514,12 @@ func TestShellInitOpenVerbDispatch(t *testing.T) {
 	}
 }
 
-// TestShellInitOpenDispatchArmCdsConditionally asserts _hop_dispatch's open)
-// arm captures `command hop "$2" open` stdout into target and cds only if
-// non-empty. This is the contract: when the user picks "Open here" the binary
-// prints the path; for all other apps (editors, terminals) it prints nothing
-// and the parent shell's cwd is left alone.
-func TestShellInitOpenDispatchArmCdsConditionally(t *testing.T) {
+// TestShellInitOpenDispatchArmUsesTempFile asserts the open) arm in
+// _hop_dispatch routes the cd-target through a temp file via WT_CD_FILE,
+// not through stdout capture. wt's app menu is interactive — capturing
+// stdout with $(...) would swallow the menu and cause a hang. The temp-file
+// mechanism keeps wt's stdio fully connected to the user's terminal.
+func TestShellInitOpenDispatchArmUsesTempFile(t *testing.T) {
 	rootForCompletion = newRootCmd()
 	defer func() { rootForCompletion = nil }()
 
@@ -530,10 +528,28 @@ func TestShellInitOpenDispatchArmCdsConditionally(t *testing.T) {
 		t.Fatalf("shell-init zsh: %v", err)
 	}
 	out := stdout.String()
-	if !strings.Contains(out, `target="$(command hop "$2" open)"`) {
-		t.Fatalf("expected open) arm to capture `command hop \"$2\" open` stdout, got:\n%s", out)
+	// The arm creates a temp file via mktemp.
+	if !strings.Contains(out, "mktemp -t hop-open-cd.XXXXXX") {
+		t.Errorf("expected `mktemp -t hop-open-cd.XXXXXX` in open) arm, got:\n%s", out)
 	}
-	if !strings.Contains(out, `if [[ -n "$target" ]]; then`) {
-		t.Fatalf("expected conditional `[[ -n \"$target\" ]]` cd guard in open) arm, got:\n%s", out)
+	// It exports WT_CD_FILE prefix-style on the command line (so it's scoped
+	// to that single invocation, not leaked into the parent function's env).
+	if !strings.Contains(out, `WT_CD_FILE="$cdfile" WT_WRAPPER=1 command hop "$2" open`) {
+		t.Errorf("expected `WT_CD_FILE=\"$cdfile\" WT_WRAPPER=1 command hop \"$2\" open` invocation, got:\n%s", out)
+	}
+	// It does NOT capture stdout via $(...) — that would swallow wt's menu.
+	if strings.Contains(out, `target="$(command hop "$2" open)"`) {
+		t.Errorf("expected NO stdout capture in open) arm (would swallow wt's interactive menu), got:\n%s", out)
+	}
+	// It conditionally cds based on whether the temp file is non-empty.
+	if !strings.Contains(out, `[[ -s "$cdfile" ]]`) {
+		t.Errorf("expected `[[ -s \"$cdfile\" ]]` non-empty test on temp file, got:\n%s", out)
+	}
+	if !strings.Contains(out, `cd -- "$target"`) {
+		t.Errorf("expected `cd -- \"$target\"` cd line in open) arm, got:\n%s", out)
+	}
+	// It cleans up the temp file unconditionally.
+	if !strings.Contains(out, `rm -f "$cdfile"`) {
+		t.Errorf("expected `rm -f \"$cdfile\"` cleanup, got:\n%s", out)
 	}
 }

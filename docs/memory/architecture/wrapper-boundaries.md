@@ -23,8 +23,7 @@ Test files (`*_test.go`) MAY use `os/exec` directly — to spawn the built binar
 | `Run(ctx, name, args...) ([]byte, error)` | Non-interactive. Captures stdout to bytes; stderr passes through to parent. |
 | `RunCapture(ctx, dir, name, args...) ([]byte, error)` | `Run` with an explicit `cmd.Dir`. Captures stdout, stderr passes through. Used by `internal/scan` for `git remote` / `git remote get-url` invocations scoped to a discovered repo's working tree (cmd.Dir is preferred over `git -C` so the subprocess sees the canonical cwd directly). |
 | `RunInteractive(ctx, stdin io.Reader, name, args...) (string, error)` | Pipes stdin, captures stdout to string; stderr passes through. Used for fzf. |
-| `RunForeground(ctx, dir, name, args...) (int, error)` | Runs a child with `cmd.Dir = dir` and stdin/stdout/stderr **inherited** from the parent. Returns the child's exit code on success (error nil); returns `(-1, ErrNotFound)` if the binary is missing; returns `(-1, err)` for other I/O / exec failures. Used by `hop -R` (and the shim's tool-form, which rewrites to `-R`). Implemented as a thin wrapper over `RunForegroundEnv(ctx, dir, nil, name, args...)`. |
-| `RunForegroundEnv(ctx, dir, env, name, args...) (int, error)` | `RunForeground` with an explicit env override. When `env` is `nil`, the subprocess inherits the parent's environment (identical to `RunForeground`). When `env` is non-nil, the subprocess sees exactly those entries — callers SHOULD start from `os.Environ()` and append/override entries to extend the parent env rather than replace it. Used by `hop <name> open` to set `WT_CD_FILE` and `WT_WRAPPER` on top of the parent env when delegating to `wt`. |
+| `RunForeground(ctx, dir, name, args...) (int, error)` | Runs a child with `cmd.Dir = dir` and stdin/stdout/stderr **inherited** from the parent. Returns the child's exit code on success (error nil); returns `(-1, ErrNotFound)` if the binary is missing; returns `(-1, err)` for other I/O / exec failures. The subprocess always inherits the parent's environment. When `dir` is `""`, the subprocess inherits the parent's working directory. Used by `hop -R` (with `dir = repo.Path`) and `hop <name> open` (with `dir = ""` — the verb forwards the path to wt as a positional arg rather than chdir'ing). |
 | `var ErrNotFound` | Sentinel returned when the binary is not on PATH. Callers use `errors.Is(err, proc.ErrNotFound)` to produce install-hint messages. |
 | `ExitCode(err) (int, bool)` | Helper to extract the child's exit code from an `*exec.ExitError` without callers needing to import `os/exec`. |
 
@@ -89,26 +88,28 @@ Per Constitution Principle IV ("Wrap, Don't Reinvent") — wrap external tools, 
 | `git clone`, `git pull`, `git pull --rebase`, `git push` | `cmd/hop/clone.go`, `cmd/hop/pull.go`, `cmd/hop/sync.go` each call `proc.RunCapture(ctx, path, "git", ...)` (or `proc.Run` for clone) inline | Each call site is one line; `internal/proc.RunCapture` already enforces the cmd.Dir + argv-slice contract. A dedicated `internal/git/` package would be a thin pass-through that adds an indirection without containing logic. Promote later if a verb composes more git operations (e.g., a `status`-then-`fetch` flow that benefits from a single function boundary). |
 | YAML parsing | `internal/config/config.go` calls `yaml.Unmarshal` directly into `*yaml.Node` | `gopkg.in/yaml.v3` already is the wrapper. |
 | `-R` child exec | `cmd/hop/main.go::runDashR` calls `proc.RunForeground` | Wrapping is `internal/proc`'s job; the binary just composes. |
-| `wt open` invocation | `cmd/hop/open.go::runOpen` calls `proc.RunForegroundEnv(ctx, repo.Path, env, "wt", "open")` inline | Single operation; a dedicated `internal/wt/` package would be a 5-line pass-through. The env contract (`WT_CD_FILE`, `WT_WRAPPER`) is wt's, not hop's, and is documented inline in `runOpen`. Promote later if hop grows other wt-delegating verbs that share env construction. |
+| `wt open` invocation | `cmd/hop/open.go::runOpen` calls `proc.RunForeground(ctx, "", "wt", "open", repo.Path)` inline | Single operation; the binary is a transparent passthrough — the cd-handoff and env setup live in the shim, not the binary. A dedicated `internal/wt/` package would have nothing to encapsulate (one `RunForeground` call). |
 
-## `wt` env contract (`cmd/hop/open.go`)
+## `wt` integration (`cmd/hop/open.go` + shim)
 
-`runOpen` shells out to `wt open` to delegate app detection, menu selection, and launching for `hop <name> open`. wt is a hard runtime dependency declared as a Homebrew formula `depends_on "sahil87/tap/wt"` in `.github/formula-template.rb` (which the release workflow rewrites into `Formula/hop.rb` at tag time).
+`hop <name> open` delegates to `wt open <path>` for app detection, menu selection, and launching. wt is a hard runtime dependency declared as a Homebrew formula `depends_on "sahil87/tap/wt"` in `.github/formula-template.rb` (which the release workflow rewrites into `Formula/hop.rb` at tag time).
 
-Two env vars cross the hop→wt boundary:
+The binary is a transparent passthrough: it resolves the repo and `exec`s `wt open <path>` via `proc.RunForeground` with stdio fully inherited. **All env-var orchestration lives in the shell shim**, not the binary. This keeps the binary trivial (~25 lines) and respects the rule that interactive subprocesses can't multiplex stdout with a return-value channel.
 
-| Env var | Direction | Purpose |
+Two env vars cross the shim→wt boundary (the binary is a passive carrier — they're set on the shim's `command hop ... open` invocation prefix-style, hop's process inherits them, and wt sees them via the parent env):
+
+| Env var | Lifecycle | Purpose |
 |---|---|---|
-| `WT_CD_FILE` | hop sets, wt reads/writes | hop creates a temp file via `os.CreateTemp("", "hop-open-cd-*")` and exports its path. wt writes the resolved repo path to that file iff the user picks "Open here"; for any other menu choice (editors, terminals, file managers) wt leaves the file empty. After wt exits, hop reads the file and re-emits its contents to stdout. The file is cleaned up via `defer os.Remove`. |
-| `WT_WRAPPER` | hop sets, wt reads | hop sets `WT_WRAPPER=1` so wt suppresses its `hint: "Open here" requires the shell wrapper... eval "$(wt shell-setup)"` message — hop is acting as the wrapper for this invocation, and the cd round-trip works through hop's stdout-capture protocol regardless. |
+| `WT_CD_FILE` | shim creates temp file via `mktemp -t hop-open-cd.XXXXXX`, exports the path on the `command hop "$2" open` line, reads the file after wt exits, removes it via `rm -f` | wt writes the resolved repo path to this file iff the user picks "Open here"; for any other menu choice (editors, terminals, file managers) wt leaves the file empty. The shim reads the file with `[[ -s "$cdfile" ]]` and `cd -- "$target"` if non-empty. |
+| `WT_WRAPPER=1` | shim exports prefix-style on the same invocation | Tells wt to suppress its `hint: "Open here" requires the shell wrapper... eval "$(wt shell-setup)"` message — hop's shim is the wrapper, and the cd-handoff is already covered by the shim's `WT_CD_FILE` read. |
 
-A third env var stays inside the hop→shim boundary:
+**Why temp file (not stdout capture)**: wt's app menu is interactive and renders to stdout. Capturing stdout with `$(...)` would swallow the menu and leave the user staring at a blank prompt while wt blocks on stdin. The temp file is a side-channel that keeps wt's stdio fully connected to the user's terminal.
 
-| Env var | Direction | Purpose |
-|---|---|---|
-| `HOP_WRAPPER` | shim sets (top-level `export HOP_WRAPPER=1` in `posixInit`), binary reads | The binary uses this to detect that it's running under hop's shell shim, which suppresses `openHereNoShimHint` for the `open` verb (the shim handles the parent-shell `cd` via stdout capture). When unset (binary-direct invocation, tests), the binary emits the hint to stderr to inform the user that "Open here" needs the shim to actually `cd`. The path is still emitted on stdout regardless, so `cd "$(hop <name> open)"` works as a manual composition. |
+**Path-arg, not chdir**: hop passes the resolved repo path to wt as a positional arg (`wt open <path>`) rather than chdir'ing first. wt has a "path-first" branch that opens the app menu when called with an existing-directory arg; chdir'ing into a main-repo cwd would instead trigger wt's worktree-selection menu (which is wrong for hop's use case — hop wants to open the directory, not pick a worktree underneath it).
 
-Why no `internal/wt` wrapper package: the call site is one function (`runOpen`, ~40 lines), the env construction is straightforward (two `append` entries), and the caller-side concerns (resolving the repo, reading back the cd-file, emitting the no-shim hint) are not generic enough to factor into a sub-package. If hop grows additional wt-delegating verbs (a hypothetical `hop <name> openin <app>` shorthand, or `hop <name> tabs` listing wt's app menu), the wrapper extraction becomes a worthwhile refactor — until then the inline call respects the same "Wrap, Don't Reinvent" boundary as `runDashR`.
+**Why no `internal/wt` wrapper package**: the binary's call site is one `proc.RunForeground` line; there's nothing to encapsulate. The env-orchestration that *would* warrant a wrapper lives in the shim (shell, not Go). If hop grows additional wt-delegating verbs that share Go-side env construction (none planned), promote then.
+
+**Direct binary invocation** (no shim, e.g., `/path/to/hop outbox open`): the binary still execs `wt open <path>` correctly. wt's interactive menu reaches the user's terminal. Picking "Open here" with no `WT_CD_FILE` set falls through to wt's own `cd -- '<path>'` printout + `wt shell-setup` install hint — that's wt's contract, surfacing transparently.
 
 ## Composability primitives
 
