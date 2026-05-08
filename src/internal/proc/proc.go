@@ -113,8 +113,21 @@ func ExitCode(err error) (int, bool) {
 // Used by `hop -C <name> <cmd>...` to delegate to a child command in a
 // resolved repo's directory.
 func RunForeground(ctx context.Context, dir, name string, args ...string) (int, error) {
+	return RunForegroundEnv(ctx, dir, nil, name, args...)
+}
+
+// RunForegroundEnv is RunForeground with an explicit env override. When env is
+// nil, the subprocess inherits the parent's environment (identical to
+// RunForeground). When env is non-nil, the subprocess sees exactly those
+// entries — callers SHOULD start from os.Environ() and append/override entries
+// to extend the parent env rather than replace it.
+//
+// Used by `hop <name> open` to set WT_CD_FILE and WT_WRAPPER on top of the
+// parent env when delegating to wt.
+func RunForegroundEnv(ctx context.Context, dir string, env []string, name string, args ...string) (int, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
+	cmd.Env = env
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -123,7 +136,6 @@ func RunForeground(ctx context.Context, dir, name string, args ...string) (int, 
 			return -1, ErrNotFound
 		}
 		if code, ok := ExitCode(err); ok {
-			// Child ran and exited non-zero. Propagate the code without an error.
 			return code, nil
 		}
 		return -1, err

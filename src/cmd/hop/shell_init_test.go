@@ -472,3 +472,62 @@ func TestShellInitUnsupportedShell(t *testing.T) {
 		t.Fatalf("unexpected message: %q", withCode.msg)
 	}
 }
+
+// TestShellInitExportsHopWrapper asserts the shim sets HOP_WRAPPER=1 in the
+// environment so the binary can detect when it's running under the shim
+// (suppresses the "Open here" no-shim hint).
+func TestShellInitExportsHopWrapper(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "export HOP_WRAPPER=1") {
+		t.Fatalf("expected `export HOP_WRAPPER=1`, got:\n%s", stdout.String())
+	}
+}
+
+// TestShellInitOpenVerbDispatch asserts the shim recognizes $2 == "open" in
+// rule-5 dispatch and routes it to _hop_dispatch open "$1". Without this arm,
+// `hop <name> open` would fall through to the otherwise-branch and be
+// rewritten to `command hop -R <name> open` (tool-form), bypassing the new verb.
+func TestShellInitOpenVerbDispatch(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `"$2" == "open"`) {
+		t.Fatalf("expected `\"$2\" == \"open\"` arm in dispatch, got:\n%s", out)
+	}
+	if !strings.Contains(out, `_hop_dispatch open "$1"`) {
+		t.Fatalf("expected `_hop_dispatch open \"$1\"` route, got:\n%s", out)
+	}
+}
+
+// TestShellInitOpenDispatchArmCdsConditionally asserts _hop_dispatch's open)
+// arm captures `command hop "$2" open` stdout into target and cds only if
+// non-empty. This is the contract: when the user picks "Open here" the binary
+// prints the path; for all other apps (editors, terminals) it prints nothing
+// and the parent shell's cwd is left alone.
+func TestShellInitOpenDispatchArmCdsConditionally(t *testing.T) {
+	rootForCompletion = newRootCmd()
+	defer func() { rootForCompletion = nil }()
+
+	stdout, _, err := runArgs(t, "shell-init", "zsh")
+	if err != nil {
+		t.Fatalf("shell-init zsh: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `target="$(command hop "$2" open)"`) {
+		t.Fatalf("expected open) arm to capture `command hop \"$2\" open` stdout, got:\n%s", out)
+	}
+	if !strings.Contains(out, `if [[ -n "$target" ]]; then`) {
+		t.Fatalf("expected conditional `[[ -n \"$target\" ]]` cd guard in open) arm, got:\n%s", out)
+	}
+}

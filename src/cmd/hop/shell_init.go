@@ -19,20 +19,26 @@ import (
 //     those are now $2 verbs, not $1 subcommands)
 //  4. $1 is a flag                                      → forward to binary
 //  5. otherwise ($1 is treated as a repo name) — dispatch on $2:
-//       $# == 1                                         → _hop_dispatch cd "$1" (bare-name → cd)
-//       $# >= 2 and $2 == "cd"                          → _hop_dispatch cd "$1" (explicit cd verb)
-//       $# >= 2 and $2 == "where"                       → command hop "$1" where (binary handles)
-//       $# >= 2 and $2 == "-R"                          → command hop -R "$1" "${@:3}" (canonical exec form)
-//       otherwise                                       → command hop -R "$1" "$2" "${@:3}" (tool-form sugar)
+//     $# == 1                                         → _hop_dispatch cd "$1" (bare-name → cd)
+//     $# >= 2 and $2 == "cd"                          → _hop_dispatch cd "$1" (explicit cd verb)
+//     $# >= 2 and $2 == "where"                       → command hop "$1" where (binary handles)
+//     $# >= 2 and $2 == "open"                        → _hop_dispatch open "$1" (open-verb; "Open here" cds the parent shell via stdout capture)
+//     $# >= 2 and $2 == "-R"                          → command hop -R "$1" "${@:3}" (canonical exec form)
+//     otherwise                                       → command hop -R "$1" "$2" "${@:3}" (tool-form sugar)
 //
 // The shim does NOT inspect PATH for $1 or $2 — the grammar is "subcommand
-// xor repo" in $1, and $2 is either a verb (`cd`, `where`), `-R`, or a tool name.
+// xor repo" in $1, and $2 is either a verb (`cd`, `where`, `open`), `-R`, or a tool name.
 // Missing tools surface via the binary's `hop: -R: '<cmd>' not found.` error.
 // The shim rewrites the user-facing `hop <name> -R <cmd>...` form to
 // `command hop -R <name> <cmd>...` so the binary's extractDashR continues to
 // see the existing internal shape.
 const posixInit = `# hop shell integration — emit via: eval "$(hop shell-init <shell>)"
 # Installs: hop function (with bare-name dispatch + verb dispatch + tool-form), h alias, hi alias, completion.
+
+# HOP_WRAPPER=1 signals to the binary that the shell shim is wrapping the call.
+# Used by the open verb's "Open here" path to suppress the no-shim hint when
+# the shim will handle the parent-shell cd via stdout capture.
+export HOP_WRAPPER=1
 
 hop() {
   if [[ $# -eq 0 ]]; then
@@ -59,7 +65,7 @@ hop() {
       if [[ $# -eq 1 ]]; then
         # Bare-name dispatch: hop <name> -> cd into the repo (shorthand for hop <name> cd).
         _hop_dispatch cd "$1"
-      elif [[ "$2" == "cd" || "$2" == "where" ]]; then
+      elif [[ "$2" == "cd" || "$2" == "where" || "$2" == "open" ]]; then
         # Verb dispatch at $2. The verbs are 2-arg only — extra args (e.g.
         # hop <name> cd extra) are forwarded to the binary so cobra's
         # MaximumNArgs(2) rejects with the right error rather than silently
@@ -69,6 +75,11 @@ hop() {
         elif [[ "$2" == "cd" ]]; then
           # hop <name> cd -> cd into the repo (shim handles, parent shell mutates).
           _hop_dispatch cd "$1"
+        elif [[ "$2" == "open" ]]; then
+          # hop <name> open -> delegate to wt's app menu (binary handles).
+          # If user picks "Open here", the binary prints the path on stdout;
+          # the shim's _hop_dispatch open arm captures it and cds the parent.
+          _hop_dispatch open "$1"
         else
           # hop <name> where -> binary resolves and prints the path.
           command hop "$1" where
@@ -95,6 +106,17 @@ _hop_dispatch() {
       local target
       target="$(command hop "$2" where)" || return $?
       cd -- "$target"
+      ;;
+    open)
+      # Caller passes $2 as the repo name (verb-dispatch in hop() pre-validated $#==2).
+      # The binary delegates to wt's menu and prints a path on stdout iff the user
+      # picked "Open here"; for editor/terminal/etc. choices stdout is empty and we
+      # do not cd.
+      local target
+      target="$(command hop "$2" open)" || return $?
+      if [[ -n "$target" ]]; then
+        cd -- "$target"
+      fi
       ;;
     clone)
       # Detect URL form (contains :// or @host:path)

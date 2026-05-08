@@ -3,6 +3,7 @@ package proc
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -194,4 +195,69 @@ func TestRunCaptureBothNotFound(t *testing.T) {
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
+}
+
+func TestRunForegroundEnvNilInheritsParentEnv(t *testing.T) {
+	t.Setenv("HOP_TEST_PARENT", "parent-value")
+	ctx := context.Background()
+	// `sh -c 'printenv HOP_TEST_PARENT'` writes the env value to stdout (which
+	// RunForegroundEnv inherits to the test's stdout — we can't assert content
+	// directly, so use a different shape: the subprocess exits 0 only if the
+	// var is set non-empty, exits 1 otherwise).
+	code, err := RunForegroundEnv(ctx, "/", nil, "sh", "-c", `[ -n "$HOP_TEST_PARENT" ]`)
+	if err != nil {
+		t.Fatalf("RunForegroundEnv with nil env: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("expected exit 0 (parent env inherited), got %d", code)
+	}
+}
+
+func TestRunForegroundEnvOverrideReplaces(t *testing.T) {
+	t.Setenv("HOP_TEST_PARENT", "parent-value")
+	ctx := context.Background()
+	// With env set to a slice that does NOT include HOP_TEST_PARENT, the
+	// subprocess SHALL NOT see it. Exits 0 only if the var is unset/empty.
+	env := []string{"PATH=" + getPath()}
+	code, err := RunForegroundEnv(ctx, "/", env, "sh", "-c", `[ -z "$HOP_TEST_PARENT" ]`)
+	if err != nil {
+		t.Fatalf("RunForegroundEnv with override env: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("expected exit 0 (HOP_TEST_PARENT not in override env), got %d", code)
+	}
+}
+
+func TestRunForegroundEnvAddsEntry(t *testing.T) {
+	ctx := context.Background()
+	// Build env from os.Environ()-like base plus a new entry, then assert the
+	// subprocess sees it.
+	env := []string{"PATH=" + getPath(), "HOP_TEST_INJECTED=injected-value"}
+	code, err := RunForegroundEnv(ctx, "/", env, "sh", "-c", `[ "$HOP_TEST_INJECTED" = "injected-value" ]`)
+	if err != nil {
+		t.Fatalf("RunForegroundEnv with injected entry: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("expected exit 0 (HOP_TEST_INJECTED visible to subprocess), got %d", code)
+	}
+}
+
+func TestRunForegroundEnvNotFound(t *testing.T) {
+	ctx := context.Background()
+	code, err := RunForegroundEnv(ctx, "/", nil, "this-binary-does-not-exist-xyz123")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+	if code != -1 {
+		t.Fatalf("expected code -1 on missing binary, got %d", code)
+	}
+}
+
+// getPath returns the parent's PATH for use as a minimal env in tests that
+// override env (sh needs PATH to find /bin/sh helpers).
+func getPath() string {
+	if p := os.Getenv("PATH"); p != "" {
+		return p
+	}
+	return "/usr/bin:/bin"
 }
