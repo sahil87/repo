@@ -20,6 +20,7 @@ Usage:
   hop <name>                cd into the repo (shell function — needs ` + "`eval \"$(hop shell-init zsh)\"`" + `)
   hop <name> cd             same — explicit verb form
   hop <name> where          echo abs path of matching repo
+  hop <name> open           open the repo in an app (delegates to wt's menu; "Open here" cds the parent shell)
   hop <name> -R <cmd>...    shim-only — run <cmd>... with cwd = <name>'s repo dir
   hop -R <name> <cmd>...    binary-direct exec form (also reached via the shim)
   hop <name> <tool>...      shim-only sugar for ` + "`hop -R <name> <tool> ...`" + ` (e.g., ` + "`hop dotfiles cursor`" + `)
@@ -46,6 +47,8 @@ Usage:
 Notes:
   - ` + "`hop <name>`" + ` and ` + "`hop <name> cd`" + ` require shell integration (a binary can't change
     its parent shell's cwd). Without it, use:  cd "$(hop <name> where)"
+  - ` + "`hop <name> open`" + `'s "Open here" choice also requires the shell shim to cd. Other
+    menu choices (editors, terminals, file managers) launch their app directly.
   - The repo-first ` + "`hop <name> -R <cmd>...`" + ` and ` + "`hop <name> <tool>...`" + ` forms are shim-only
     rewrites — the binary's ` + "`-R`" + ` parser expects ` + "`hop -R <name> <cmd>...`" + `. Scripts and CI
     that bypass the shim must use the binary-direct form ` + "`hop -R <name> <cmd>...`" + ` (and
@@ -55,7 +58,7 @@ Notes:
     linear history, no auto-resolve on conflict.
   - On ambiguous or no-match queries, fzf opens prefilled with your query.
   - Grammar: first positional is a repo OR a subcommand (mutually exclusive). When it's
-    a repo, second positional is a verb (` + "`cd`, `where`" + `), ` + "`-R`" + `, or a tool name.
+    a repo, second positional is a verb (` + "`cd`, `where`, `open`" + `), ` + "`-R`" + `, or a tool name.
   - Config search order: $HOP_CONFIG, then $XDG_CONFIG_HOME/hop/hop.yaml, then $HOME/.config/hop/hop.yaml.`
 
 // bareNameHint is the exact stderr line printed when the binary is invoked
@@ -72,7 +75,7 @@ const cdHint = `hop: 'cd' is shell-only. Add 'eval "$(hop shell-init zsh)"' to y
 // binary receives `hop <name> <tool>` (2 args, $2 is neither `where` nor `cd`
 // nor `-R`). Tool-form is shim-only — the binary errors with this hint.
 // %s is replaced with args[1] (the would-be tool name).
-const toolFormHintFmt = `hop: '%s' is not a hop verb (cd, where). For tool-form, install the shim: eval "$(hop shell-init zsh)", or use: hop -R "<name>" <tool> [args...]`
+const toolFormHintFmt = `hop: '%s' is not a hop verb (cd, where, open). For tool-form, install the shim: eval "$(hop shell-init zsh)", or use: hop -R "<name>" <tool> [args...]`
 
 func newRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -101,6 +104,8 @@ func newRootCmd() *cobra.Command {
 					return resolveAndPrint(cmd, args[0])
 				case "cd":
 					return &errExitCode{code: 2, msg: cdHint}
+				case "open":
+					return runOpen(cmd, args[0])
 				default:
 					return &errExitCode{code: 2, msg: fmt.Sprintf(toolFormHintFmt, args[1])}
 				}

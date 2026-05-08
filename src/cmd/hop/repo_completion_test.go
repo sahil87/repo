@@ -331,6 +331,81 @@ func TestCompletionSyncSurfacesReposAndGroups(t *testing.T) {
 	}
 }
 
+// TestCompletionVerbPositionListsCdWhereOpen exercises completion at the $2
+// verb position: `hop <name> <TAB>` should surface `cd`, `where`, and `open`.
+// These are the recognized verbs at args[1] in the root command's RunE.
+func TestCompletionVerbPositionListsCdWhereOpen(t *testing.T) {
+	writeReposFixture(t, completionYAML)
+
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "alpha", "")
+	if err != nil {
+		t.Fatalf("__complete alpha: %v", err)
+	}
+	cands := candidatesFrom(stdout.String())
+	wantSet := map[string]bool{"cd": false, "where": false, "open": false}
+	for _, c := range cands {
+		if _, ok := wantSet[c]; ok {
+			wantSet[c] = true
+		}
+	}
+	for verb, found := range wantSet {
+		if !found {
+			t.Errorf("expected verb %q in candidates at $2 position, got: %v", verb, cands)
+		}
+	}
+}
+
+// TestCompletionVerbPositionDoesNotListRepoNames asserts that at the $2 position
+// the completion returns ONLY the verb set, not repo names. Without this guard,
+// a regression that returned repos at $2 would advertise nonsensical
+// `hop outbox dotfiles` style commands.
+func TestCompletionVerbPositionDoesNotListRepoNames(t *testing.T) {
+	writeReposFixture(t, completionYAML)
+
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "alpha", "")
+	if err != nil {
+		t.Fatalf("__complete alpha: %v", err)
+	}
+	cands := candidatesFrom(stdout.String())
+	for _, c := range cands {
+		if c == "alpha" || c == "beta" || c == "dotfiles" {
+			t.Fatalf("expected no repo names at $2 position, got %q in candidates: %v", c, cands)
+		}
+	}
+}
+
+// TestCompletionThirdPositionalSuppressed asserts that beyond $2 there are no
+// candidates. cobra's MaximumNArgs(2) would reject any further positional, so
+// suggesting candidates would be misleading.
+func TestCompletionThirdPositionalSuppressed(t *testing.T) {
+	writeReposFixture(t, completionYAML)
+
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "alpha", "open", "")
+	if err != nil {
+		t.Fatalf("__complete alpha open: %v", err)
+	}
+	if got := candidatesFrom(stdout.String()); len(got) > 0 {
+		t.Fatalf("expected no candidates at position 3, got: %v", got)
+	}
+}
+
+// TestCompletionCloneSuppressesAfterPositional asserts that `hop clone <name>
+// <TAB>` returns no candidates. clone delegates to completeRepoNames via
+// completeCloneArg, but the repo-verb candidates (cd/where/open) only apply to
+// the root command's $2 — clone has at most one positional, so a second
+// argument should suggest nothing rather than the verb set.
+func TestCompletionCloneSuppressesAfterPositional(t *testing.T) {
+	writeReposFixture(t, completionYAML)
+
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "clone", "alpha", "")
+	if err != nil {
+		t.Fatalf("__complete clone alpha: %v", err)
+	}
+	if got := candidatesFrom(stdout.String()); len(got) > 0 {
+		t.Fatalf("expected no candidates after first positional on clone, got: %v", got)
+	}
+}
+
 func TestCompletionCloneSuppressesOnAllFlag(t *testing.T) {
 	writeReposFixture(t, completionYAML)
 
