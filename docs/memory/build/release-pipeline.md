@@ -80,6 +80,7 @@ The published formula's structure:
 
 - `class Hop < Formula` opener.
 - `desc`, `homepage`, `version`, `license "MIT"` (informational — brew does not enforce).
+- `depends_on "sahil87/tap/wt"` — runtime dependency on the `wt` worktree CLI. `hop <name> open` shells out to `wt open` to delegate app detection, menu selection, and the "Open here" cd round-trip (see [`architecture/wrapper-boundaries`](../architecture/wrapper-boundaries.md#wt-env-contract-cmdhopopengo) for the env contract). Declared in the template so `brew install sahil87/tap/hop` pulls wt automatically. `Formula/wt.rb` already lives in `sahil87/homebrew-tap` alongside hop, fab-kit, rk, tu, and idea — no separate tap-side work was needed.
 - `on_macos` block with nested `on_arm` / `on_intel` blocks declaring `url` and `sha256` for the two darwin tar.gz files.
 - `on_linux` block with the same shape for the two linux tar.gz files.
 - URLs follow `https://github.com/sahil87/hop/releases/download/v#{version}/hop-{os}-{arch}.tar.gz` — note the `v` prefix is re-added in the URL, so `version "VERSION_PLACEHOLDER"` stores the bare form.
