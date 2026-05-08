@@ -105,12 +105,12 @@ The bytes-not-parse choice means `print` is comment-preserving and lossless by c
 - **AND** outputs `git@github.com:foo/bar.git`
 
 ### Requirement: Read error surfacing
-If `os.ReadFile` returns an error after `Resolve()` succeeded (e.g., the file was deleted between resolution and read; permission denied; I/O error), `hop config print` SHALL return a wrapped error of the form `hop config print: read <path>: <underlying error>`. The error SHALL propagate through the standard `translateExit` path (cobra surfaces it via stderr; exit code 1).
+If `os.ReadFile` returns an error after `Resolve()` succeeded (e.g., the file was deleted between resolution and read; permission denied; I/O error), `hop config print` SHALL return a wrapped error of the form `hop config print: read <path>: <underlying error>`. The error SHALL propagate through the standard `translateExit` path, which writes the error string verbatim to stderr (no `Error:` prefix — `rootCmd.SilenceErrors = true`) and exits 1.
 
 #### Scenario: Permission-denied read
 - **GIVEN** `$HOP_CONFIG` points to a file the user cannot read (mode 000)
 - **WHEN** I run `hop config print`
-- **THEN** stderr shows `Error: hop config print: read <path>: open <path>: permission denied` (or the platform equivalent)
+- **THEN** stderr shows `hop config print: read <path>: open <path>: permission denied` (or the platform equivalent — no `Error:` prefix because `rootCmd.SilenceErrors = true` and `translateExit` prints via `fmt.Fprintln(os.Stderr, err)`)
 - **AND** exit code is 1
 
 ### Requirement: Stdout/stderr discipline

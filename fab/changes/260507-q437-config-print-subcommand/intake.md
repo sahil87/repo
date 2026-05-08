@@ -43,8 +43,8 @@ hop config print
 
 **Exit codes** (per `main.go::translateExit`):
 - `0` — file resolved and printed.
-- `1` — `config.Resolve()` returned `ErrNoConfig` (no file in search order); or `$HOP_CONFIG` points to a missing file (the hard-error branch); or read error.
-- `2` — N/A (no usage errors possible — `cobra.NoArgs` rejects extra positionals before `RunE`).
+- `1` — `config.Resolve()` returned `ErrNoConfig` (no file in search order); or `$HOP_CONFIG` points to a missing file (the hard-error branch); or read error; OR a cobra usage error (extra positional, unknown flag) — `translateExit` maps any plain error without a wrapping `errExitCode` to exit 1.
+- `2` — N/A. The subcommand never wraps an error in `errExitCode{code: 2}`, and cobra's own usage errors for `cobra.NoArgs` violations propagate as plain errors → exit 1, not 2.
 
 **Help line** (`Short`): `print the resolved hop.yaml contents to stdout`.
 
