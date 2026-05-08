@@ -31,6 +31,9 @@ Usage:
   hop pull <name>           Run 'git pull' in the named repo
   hop pull <group>          Run 'git pull' in every cloned repo of <group>
   hop pull --all            Run 'git pull' in every cloned repo
+  hop push <name>           Run 'git push' in the named repo
+  hop push <group>          Run 'git push' in every cloned repo of <group>
+  hop push --all            Run 'git push' in every cloned repo
   hop sync <name>           Run 'git pull --rebase' then 'git push' in <name>
   hop sync <group>          Run sync in every cloned repo of <group>
   hop sync --all            Run sync in every cloned repo
@@ -53,7 +56,7 @@ Notes:
     rewrites — the binary's ` + "`-R`" + ` parser expects ` + "`hop -R <name> <cmd>...`" + `. Scripts and CI
     that bypass the shim must use the binary-direct form ` + "`hop -R <name> <cmd>...`" + ` (and
     ` + "`hop <name> where`" + ` for path resolution, which the binary handles directly).
-  - ` + "`pull`" + ` and ` + "`sync`" + ` accept a repo name OR a group name (exact match) as the
+  - ` + "`pull`" + `, ` + "`push`" + `, and ` + "`sync`" + ` accept a repo name OR a group name (exact match) as the
     positional, plus ` + "`--all`" + ` for the full registry. ` + "`sync`" + ` is ` + "`pull --rebase`" + ` + ` + "`push`" + ` —
     linear history, no auto-resolve on conflict.
   - On ambiguous or no-match queries, fzf opens prefilled with your query.
@@ -118,6 +121,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(
 		newCloneCmd(),
 		newPullCmd(),
+		newPushCmd(),
 		newSyncCmd(),
 		newLsCmd(),
 		newShellInitCmd(),
