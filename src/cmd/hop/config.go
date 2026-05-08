@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -11,9 +12,9 @@ import (
 func newConfigCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: "config helpers (init, where, scan)",
+		Short: "config helpers (init, where, scan, print)",
 	}
-	cmd.AddCommand(newConfigInitCmd(), newConfigWhereCmd(), newConfigScanCmd())
+	cmd.AddCommand(newConfigInitCmd(), newConfigWhereCmd(), newConfigScanCmd(), newConfigPrintCmd())
 	return cmd
 }
 
@@ -50,6 +51,31 @@ func newConfigWhereCmd() *cobra.Command {
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), target)
 			return nil
+		},
+	}
+}
+
+// newConfigPrintCmd returns the cobra factory for `hop config print`. The
+// subcommand resolves the active hop.yaml via config.Resolve() — the same
+// reader-contract resolver used by every other read path — then streams the
+// file's bytes verbatim to stdout. Comments and formatting are preserved by
+// construction; no parsing happens here.
+func newConfigPrintCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "print",
+		Short: "print the resolved hop.yaml contents to stdout",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path, err := config.Resolve()
+			if err != nil {
+				return err
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("hop config print: read %s: %w", path, err)
+			}
+			_, err = cmd.OutOrStdout().Write(data)
+			return err
 		},
 	}
 }

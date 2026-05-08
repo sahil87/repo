@@ -31,6 +31,7 @@ Usage:
   hop shell-init <shell>    emit shell integration (zsh or bash). Use: eval "$(hop shell-init zsh)"
   hop config init           bootstrap a starter hop.yaml
   hop config where          print the resolved hop.yaml path
+  hop config print          print the resolved hop.yaml contents to stdout
   hop config scan <dir>     scan a directory for git repos and populate hop.yaml
   hop update                self-update the hop binary via Homebrew
   hop -h | --help           show this help

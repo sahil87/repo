@@ -19,6 +19,7 @@
 | `hop shell-init <shell>` | `zsh` or `bash` (required) | Emit shell function wrapper + cobra-generated completion to stdout | 0 success, 2 unsupported shell |
 | `hop config init` | (none) | Bootstrap a starter `hop.yaml` at the resolved location | 0 written, 1 file exists, 2 write error |
 | `hop config where` | (none) | Print the resolved config path on stdout. Renamed from v0.0.1's `config path`. | 0 resolved, 1 unresolvable |
+| `hop config print` | (none) | Print the resolved `hop.yaml` contents to stdout (raw bytes, comment-preserving). | 0 success, 1 unresolvable / read error |
 | `hop config scan <dir>` | exactly 1 (directory) | Walk `<dir>` (default `--depth 3`), discover git repos via stat + `git remote`, and emit a merged `hop.yaml` to stdout (default) or merge in place via `--write` (atomic, comment-preserving). Auto-derives groups: convention-match repos go to `default`; non-convention repos land in invented map-shaped groups keyed off the parent dir basename. | 0 success (incl. zero repos found); 1 missing `hop.yaml` / git missing / write failure; 2 usage error (missing arg, dir validation, `--depth < 1`) |
 | `hop update` | (none) | Self-update the `hop` binary via Homebrew. No-op (with hint) when the binary was not installed via brew. | 0 success, 1 brew failure |
 | `hop -h \| --help \| help` | (none) | Print help text on stdout | 0 |
@@ -410,7 +411,7 @@ Subcommands that don't need a tool MUST work without it. Examples:
 
 `hop -h | --help | help` emits help text to stdout. Cobra renders the help; the `Usage:` table and `Notes:` block come from `rootLong` in `src/cmd/hop/root.go`. Top-level structure mirrors the inventory table above.
 
-The `Usage:` block enumerates (in this order): `hop`, `hop <name>`, `hop <name> cd`, `hop <name> where`, `hop <name> -R <cmd>...`, `hop <name> <tool>...`, `hop clone <name>`, `hop clone <url>`, `hop clone --all`, `hop clone`, `hop ls`, `hop shell-init <shell>`, `hop config init`, `hop config where`, `hop config scan <dir>`, `hop update`, `hop -h | --help`, `hop -v | --version`.
+The `Usage:` block enumerates (in this order): `hop`, `hop <name>`, `hop <name> cd`, `hop <name> where`, `hop <name> -R <cmd>...`, `hop <name> <tool>...`, `hop clone <name>`, `hop clone <url>`, `hop clone --all`, `hop clone`, `hop ls`, `hop shell-init <shell>`, `hop config init`, `hop config where`, `hop config print`, `hop config scan <dir>`, `hop update`, `hop -h | --help`, `hop -v | --version`.
 
 The `Notes:` block in `rootLong` documents:
 - `hop <name>` and `hop <name> cd` require shell integration (a binary can't change its parent shell's cwd). Without it, use `cd "$(hop <name> where)"`.
