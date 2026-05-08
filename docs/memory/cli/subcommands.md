@@ -4,7 +4,7 @@ What each subcommand of the `hop` binary actually does. Source files live in `sr
 
 The grammar is **`subcommand` xor `repo` at $1**. When $1 is a subcommand (`clone`, `ls`, `shell-init`, `config`, `update`), normal cobra dispatch applies. When $1 is a repo name, the root command's `RunE` switches on `len(args)` and `args[1]`: 1 arg → bare-name hint (shell-only); 2 args, `args[1] == "where"` → resolve and print; 2 args, `args[1] == "cd"` → cd-verb hint (shell-only); 2 args, anything else → tool-form hint (shim-only). Cobra's `MaximumNArgs(2)` cap rejects 3+ positionals before RunE runs. The verbs `cd` and `where` are NOT subcommands at $1 — they exist only at $2 in the repo-first form (the v0.x top-level `hop cd <name>` and `hop where <name>` were removed in the repo-verb grammar flip).
 
-Match resolution algorithm used by `hop` (bare picker), `hop <name> where`, `hop <name> cd` (via the shim's `_hop_dispatch cd`), `hop clone`, `hop -R` is documented separately in [match-resolution](match-resolution.md).
+Match resolution algorithm used by `hop` (bare picker), `hop <name> where`, `hop <name> cd` (via the shim's `_hop_dispatch cd`), `hop clone`, `hop -R` is documented separately in [match-resolution](match-resolution.md). The name-or-group resolver used by `hop pull` and `hop sync` (which adds an exact group-match step in front of the existing substring repo match) is described in the same file under [Name-or-Group Resolution](match-resolution.md#name-or-group-resolution).
 
 ## Inventory
 
@@ -17,6 +17,8 @@ Match resolution algorithm used by `hop` (bare picker), `hop <name> where`, `hop
 | `hop <name> <tool> [args...]` | `root.go` (RunE 2-arg default) for the binary; `shell_init.go::posixInit` for the shim | 2 positionals (binary cap), 2+ in the shim | Binary: prints `fmt.Sprintf(toolFormHintFmt, args[1])` (`hop: '<tool>' is not a hop verb (cd, where). For tool-form, install the shim: eval "$(hop shell-init zsh)", or use: hop -R "<name>" <tool> [args...]`) to stderr, exits 2. Shim: rewrites to `command hop -R "$1" "$2" "${@:3}"` (tool-form sugar). See [Tool-form dispatch](#tool-form-dispatch) below |
 | `hop clone [<name>]` / `--all` | `clone.go` | 0 or 1, plus `--all` flag | Single resolves via match-or-fzf; `--all` iterates the full list and prints a summary |
 | `hop clone <url>` | `clone.go` | 1 (URL form) | Ad-hoc clone with auto-registration. Detects URL via `looksLikeURL`. Supports `--group`, `--no-add`, `--no-cd`, `--name` flags. See [Ad-hoc URL clone](#ad-hoc-url-clone) below |
+| `hop pull [<name-or-group>]` / `--all` | `pull.go` | 0 or 1, plus `--all` flag (`cobra.MaximumNArgs(1)`) | Wraps `git pull` over a single repo (substring match on `Name`), every cloned repo in a named group (exact group match), or every cloned repo with `--all`. Routes through `internal/proc.RunCapture` with the same 10-minute `cloneTimeout`. stdout empty; per-repo `pull: <name> ✓ <last-line>` / `pull: <name> ✗ <err>` and `skip: <name> not cloned` go to stderr. Batch mode emits a final `summary: pulled=N skipped=M failed=K`; exit 0 if `failed == 0`, else 1 (`errSilent`). Single-repo `not cloned` exits 1; usage errors (missing positional + missing `--all`, or `--all` combined with positional) exit 2 with a hop-emitted message; fzf cancel exits 130. `git` missing on PATH emits `gitMissingHint` once and aborts the batch. Resolution rules and tiebreaker live in [match-resolution](match-resolution.md#name-or-group-resolution) |
+| `hop sync [<name-or-group>]` / `--all` | `sync.go` | 0 or 1, plus `--all` flag (`cobra.MaximumNArgs(1)`) | Wraps `git pull --rebase` then `git push` per target. Same signature, flag set, and resolution rules as `hop pull` (delegates to the shared `resolveTargets` resolver). On rebase failure with `CONFLICT` substring in git's stdout/stderr, emits `sync: <name> ✗ rebase conflict — resolve manually with: git -C <path> rebase --continue` and skips push; on other rebase failure forwards git's stderr verbatim and skips push; on push failure emits `sync: <name> ✗ push failed: <err>`. Each git invocation gets an independent 10-minute timeout (per-call, not per-batch). No auto-stash, no auto-resolve, no force-push. Batch summary: `summary: synced=N skipped=M failed=K`. Exit codes match `pull` |
 | `hop ls` | `ls.go` | none (`cobra.NoArgs`) | Prints aligned `name<spaces>path` rows; empty list prints nothing |
 | `hop shell-init <shell>` | `shell_init.go` | exactly 1 | `zsh` → emits `posixInit` prefix + cobra-generated `_hop` zsh completion + `compdef _hop h hi`; `bash` → `posixInit` + cobra-generated `__start_hop` bash completion + `complete -o default -F __start_hop h hi`; missing or other → exit 2 with exact stderr |
 | `hop config init` | `config.go` | none | Writes embedded `starter.yaml` to `ResolveWriteTarget()`. Post-write stderr tip points users at `hop config scan <dir>` (and the `$HOP_CONFIG` portability tip) — see [config/init-bootstrap](../config/init-bootstrap.md) |
@@ -85,7 +87,7 @@ Lazy: only checked when the tool is actually invoked. Exact stderr lines:
 | Tool | Constant / location | Message |
 |---|---|---|
 | `fzf` | `where.go::fzfMissingHint` | `hop: fzf is not installed. Install it: brew install fzf (macOS) or apt install fzf (Debian).` |
-| `git` | `clone.go::gitMissingHint` | `hop: git is not installed.` (also reused by `hop config scan` — lazy-checked at the first `git remote` invocation; empty scan trees with zero `.git` discoveries succeed without invoking `git`) |
+| `git` | `clone.go::gitMissingHint` | `hop: git is not installed.` (also reused by `hop config scan` — lazy-checked at the first `git remote` invocation; empty scan trees with zero `.git` discoveries succeed without invoking `git`. Also reused by `hop pull` and `hop sync` — emitted once and aborts the batch immediately on the first `proc.ErrNotFound`) |
 | `<cmd>` for `-R` / tool-form | `main.go::runDashR` (formatted) | `hop: -R: '<cmd>' not found.` (when `<cmd>` is missing on PATH at exec time). Covers tool-form invocations like `hop <name> open` / `hop <name> xdg-open` since both rewrite to `-R` |
 | `brew` | `internal/update` | `hop update: brew not found on PATH.` (only when binary is brew-installed) |
 
@@ -124,7 +126,7 @@ The shared `posixInit` defines:
 - `hop()` function with this 5-step resolution ladder (top-down, first match wins). The grammar is `subcommand` xor `repo` in `$1` — never a tool, never a verb — so `$1` has only two interpretations and the ladder needs no PATH inspection or builtin/keyword filtering:
   1. **No args** → `command hop` (bare picker).
   2. **`__complete*`** → `command hop "$@"`. Cobra's hidden completion entrypoint must reach the binary; without this branch the function would route `__complete` to the bare-name dispatcher and break tab completion.
-  3. **Known subcommand** (`clone|ls|shell-init|config|update|help|--help|-h|--version|completion`) → `_hop_dispatch "$@"`. The `help` token is in this list because cobra auto-wires `hop help [subcommand]`. The list does NOT include `cd` or `where` — those moved to $2 verbs in the repo-verb grammar flip; `hop cd ...` and `hop where ...` fall into the otherwise branch and are treated as repo names (so `hop where outbox` becomes a tool-form attempt against a non-existent `where` repo, which fails at the binary's resolveByName — the migration story is "rewrite legacy callers to `hop <name> where` / `hop <name> cd`").
+  3. **Known subcommand** (`clone|pull|sync|ls|shell-init|config|update|help|--help|-h|--version|completion`) → `_hop_dispatch "$@"`. The `help` token is in this list because cobra auto-wires `hop help [subcommand]`. `pull` and `sync` were added alongside the same-named subcommands; without their entries here the shim's rule 5 would misroute `hop pull <name>` into tool-form (`command hop -R pull <name>`) and the binary would fail with `-R: 'pull' not found.`. The list does NOT include `cd` or `where` — those moved to $2 verbs in the repo-verb grammar flip; `hop cd ...` and `hop where ...` fall into the otherwise branch and are treated as repo names (so `hop where outbox` becomes a tool-form attempt against a non-existent `where` repo, which fails at the binary's resolveByName — the migration story is "rewrite legacy callers to `hop <name> where` / `hop <name> cd`").
   4. **Flag-prefixed (`-*`)** → `command hop "$@"`.
   5. **Otherwise** — `$1` is treated as a repo name; dispatch on `$2`:
      - **`$# == 1`** → `_hop_dispatch cd "$1"` (bare-name → `cd`, shorthand for `hop <name> cd`).
@@ -177,6 +179,19 @@ All status lines go to **stderr** (stdout is reserved for resolved paths, used b
 - `summary: cloned=<N> skipped=<M> failed=<F>` (only `--all`)
 
 Clone uses a 10-minute timeout (`clone.go::cloneTimeout`).
+
+## `hop pull` / `hop sync` per-line output
+
+All status lines go to **stderr** (stdout is empty — the shim does NOT `cd` after these verbs). Formats:
+
+- `pull: <name> ✓ <last-line>` / `sync: <name> ✓ <pull-summary> <push-summary>` (success — `<last-line>` is the last non-empty line of git's stdout via `lastNonEmptyLine` in `pull.go`, e.g. "Already up to date." / "Fast-forward" / "Everything up-to-date")
+- `pull: <name> ✗ <err>` / `sync: <name> ✗ <err>` (failure — git's own stderr is forwarded verbatim by `proc.RunCapture`; the hop line summarizes for the per-repo log)
+- `sync: <name> ✗ rebase conflict — resolve manually with: git -C <path> rebase --continue` (specialized hop-side hint emitted only when git's output contains a `CONFLICT` substring on rebase failure; replaces the verbatim git error line for that case — `git push` is NOT invoked when this fires)
+- `sync: <name> ✗ push failed: <err>` (rebase succeeded but push failed — non-fast-forward, network, etc.)
+- `skip: <name> not cloned` (`<path>/.git` missing — counts toward `skipped` in batch mode; exits 1 in single-repo mode)
+- `summary: pulled=<N> skipped=<M> failed=<K>` for `pull` / `summary: synced=<N> skipped=<M> failed=<K>` for `sync` (only batch mode — group match or `--all`)
+
+Each git invocation runs through `internal/proc.RunCapture` with an **independent** 10-minute timeout (reusing `clone.go::cloneTimeout`), not a shared batch budget. `sync` uses two independent contexts per repo — one for `git pull --rebase`, one for `git push`. `git` missing on PATH emits `gitMissingHint` (`hop: git is not installed.`) once and aborts a batch immediately (no further repos attempted, no summary line emitted) — mirrors `clone.go::cloneAll`'s `proc.ErrNotFound` early-return.
 
 ## `hop update` — self-update via Homebrew
 

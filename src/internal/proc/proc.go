@@ -59,6 +59,30 @@ func RunCapture(ctx context.Context, dir, name string, args ...string) ([]byte, 
 	return stdout.Bytes(), nil
 }
 
+// RunCaptureBoth is RunCapture with stderr also captured into a returned
+// buffer while still streaming it verbatim to the parent's stderr (via
+// io.MultiWriter). Use this when the caller needs to inspect stderr content
+// (e.g., to detect markers like git's "CONFLICT") without suppressing the
+// user-visible output.
+//
+// If the binary is not on PATH, the returned error is ErrNotFound. dir is
+// passed verbatim to exec — callers SHOULD validate it (e.g., via os.Stat)
+// before calling, per Constitution Principle I.
+func RunCaptureBoth(ctx context.Context, dir, name string, args ...string) (stdout, stderr []byte, err error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = io.MultiWriter(&errBuf, os.Stderr)
+	if err := cmd.Run(); err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return nil, nil, ErrNotFound
+		}
+		return outBuf.Bytes(), errBuf.Bytes(), err
+	}
+	return outBuf.Bytes(), errBuf.Bytes(), nil
+}
+
 // ExitCode reports the subprocess exit code carried by err. It returns (code, true)
 // when err wraps an *exec.ExitError (i.e., the subprocess ran and exited with a
 // non-zero status), and (0, false) otherwise (e.g., I/O error, ErrNotFound, nil).

@@ -11,10 +11,13 @@ src/
 ├── cmd/hop/                      # one cobra entrypoint (renamed from cmd/repo/)
 │   ├── main.go                   # entrypoint + translateExit + extractDashR + runDashR
 │   ├── root.go                   # newRootCmd, rootLong help text, AddCommand wiring
-│   ├── where.go                  # newWhereCmd + shared loadRepos/resolveOne/resolveByName/buildPickerLines (was path.go)
+│   ├── resolve.go                # shared loadRepos/resolveOne/resolveByName/buildPickerLines + resolveTargets/resolveMode/hasGroupExact (name-or-group resolver for pull/sync)
+│   ├── repo_completion.go        # completeRepoNames, completeCloneArg, completeRepoOrGroupNames (cobra ValidArgsFunctions)
 │   ├── cd.go                     # one file per subcommand
 │   ├── clone.go, ls.go
-│   ├── shell_init.go             # posixInit (shared zsh+bash) + cobra GenZshCompletion / GenBashCompletionV2 at runtime
+│   ├── pull.go                   # newPullCmd + pullSingle/pullBatch/pullOne + lastNonEmptyLine
+│   ├── sync.go                   # newSyncCmd + syncSingle/syncBatch/syncOne + mentionsConflict
+│   ├── shell_init.go             # posixInit (shared zsh+bash, includes pull|sync in known-subcommand list) + cobra GenZshCompletion / GenBashCompletionV2 at runtime
 │   ├── config.go                 # config + nested init/where/scan subcommand factories
 │   ├── config_scan.go            # `hop config scan` RunE + slugify, conflict resolution, summary emission
 │   ├── *_test.go                 # adjacent unit tests

@@ -1,0 +1,42 @@
+id: xj3k
+name: 260507-xj3k-add-pull-sync-subcommands
+created: 2026-05-07T12:18:13Z
+created_by: sahil-weaver
+change_type: feat
+issues: []
+progress:
+    intake: done
+    spec: done
+    apply: done
+    review: done
+    hydrate: done
+    ship: done
+    review-pr: active
+plan:
+    generated: true
+    task_count: 17
+    acceptance_count: 31
+    acceptance_completed: 31
+confidence:
+    certain: 19
+    confident: 1
+    tentative: 0
+    unresolved: 0
+    score: 4.7
+    fuzzy: true
+    dimensions:
+        signal: 90.8
+        reversibility: 83.3
+        competence: 90.5
+        disambiguation: 89.8
+stage_metrics:
+    intake: {started_at: "2026-05-07T12:18:13Z", driver: fab-new, iterations: 1, completed_at: "2026-05-07T13:16:24Z"}
+    spec: {started_at: "2026-05-07T13:16:24Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-07T13:18:39Z"}
+    apply: {started_at: "2026-05-07T13:18:39Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-07T13:26:34Z"}
+    review: {started_at: "2026-05-07T13:26:34Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-07T13:32:05Z"}
+    hydrate: {started_at: "2026-05-07T13:32:05Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-07T13:36:39Z"}
+    ship: {started_at: "2026-05-07T13:36:39Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-07T13:39:08Z"}
+    review-pr: {started_at: "2026-05-07T13:39:08Z", driver: git-pr, iterations: 1}
+prs:
+    - https://github.com/sahil87/hop/pull/17
+last_updated: 2026-05-07T13:51:59Z

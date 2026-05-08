@@ -155,3 +155,43 @@ func TestRunCaptureContextTimeout(t *testing.T) {
 		t.Fatal("expected error from context timeout, got nil")
 	}
 }
+
+func TestRunCaptureBothCapturesStderr(t *testing.T) {
+	ctx := context.Background()
+	// `sh -c 'echo out; echo err 1>&2'` writes one line to each stream.
+	stdout, stderr, err := RunCaptureBoth(ctx, "/", "sh", "-c", "echo out; echo err 1>&2")
+	if err != nil {
+		t.Fatalf("RunCaptureBoth: %v", err)
+	}
+	if got := strings.TrimSpace(string(stdout)); got != "out" {
+		t.Errorf("expected stdout 'out', got %q", got)
+	}
+	if got := strings.TrimSpace(string(stderr)); got != "err" {
+		t.Errorf("expected stderr 'err', got %q", got)
+	}
+}
+
+func TestRunCaptureBothNonZeroReturnsBuffers(t *testing.T) {
+	ctx := context.Background()
+	stdout, stderr, err := RunCaptureBoth(ctx, "/", "sh", "-c", "echo before-fail; echo to-stderr 1>&2; exit 7")
+	if err == nil {
+		t.Fatal("expected non-nil err from non-zero exit")
+	}
+	if code, ok := ExitCode(err); !ok || code != 7 {
+		t.Fatalf("expected exit code 7, got code=%d ok=%v err=%v", code, ok, err)
+	}
+	if !strings.Contains(string(stdout), "before-fail") {
+		t.Errorf("expected stdout to include 'before-fail', got %q", string(stdout))
+	}
+	if !strings.Contains(string(stderr), "to-stderr") {
+		t.Errorf("expected stderr to include 'to-stderr', got %q", string(stderr))
+	}
+}
+
+func TestRunCaptureBothNotFound(t *testing.T) {
+	ctx := context.Background()
+	_, _, err := RunCaptureBoth(ctx, "/", "this-binary-does-not-exist-xyz123")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}

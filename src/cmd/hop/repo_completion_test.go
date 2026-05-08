@@ -231,6 +231,106 @@ func TestCompletionRootSurfacesRepoNamedCode(t *testing.T) {
 	}
 }
 
+// TestCompletionPullSurfacesReposAndGroups exercises the new
+// `completeRepoOrGroupNames` helper used by `hop pull` and `hop sync`. The
+// helper returns both group names and repo names, deduplicated. We invoke the
+// hidden __complete entry for `pull` and assert both kinds appear.
+func TestCompletionPullSurfacesReposAndGroups(t *testing.T) {
+	writeReposFixture(t, `repos:
+  default:
+    dir: /tmp/test-pull-completion-default
+    urls:
+      - git@github.com:sahil87/alpha.git
+      - git@github.com:sahil87/beta.git
+  vendor:
+    dir: /tmp/test-pull-completion-vendor
+    urls:
+      - git@github.com:vendor/gamma.git
+`)
+
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "pull", "")
+	if err != nil {
+		t.Fatalf("__complete pull: %v", err)
+	}
+	out := stdout.String()
+	for _, want := range []string{"default", "vendor", "alpha", "beta", "gamma"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in pull completion, got:\n%s", want, out)
+		}
+	}
+}
+
+// TestCompletionPullDeduplicatesGroupAndRepoCollisions asserts that when a
+// name appears as BOTH a group and a repo (the rare collision case), it is
+// emitted once. Group entries are listed first, so the repo with the same
+// name is suppressed by the dedup pass.
+func TestCompletionPullDeduplicatesGroupAndRepoCollisions(t *testing.T) {
+	// "outbox" is both a group AND a repo name (in another group).
+	writeReposFixture(t, `repos:
+  outbox:
+    dir: /tmp/test-pull-collision-outbox
+    urls:
+      - git@github.com:org/foo.git
+  vendor:
+    dir: /tmp/test-pull-collision-vendor
+    urls:
+      - git@github.com:vendor/outbox.git
+`)
+
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "pull", "")
+	if err != nil {
+		t.Fatalf("__complete pull: %v", err)
+	}
+	cands := candidatesFrom(stdout.String())
+	count := 0
+	for _, c := range cands {
+		if c == "outbox" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("expected `outbox` once (dedup), got %d times in candidates: %v", count, cands)
+	}
+}
+
+// TestCompletionPullSuppressesAfterPositional asserts that once the user has
+// already typed one positional argument, the completion returns no further
+// candidates (cobra's MaximumNArgs(1) means a second positional is invalid).
+func TestCompletionPullSuppressesAfterPositional(t *testing.T) {
+	writeReposFixture(t, completionYAML)
+
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "pull", "alpha", "")
+	if err != nil {
+		t.Fatalf("__complete pull alpha: %v", err)
+	}
+	if got := candidatesFrom(stdout.String()); len(got) > 0 {
+		t.Fatalf("expected no candidates after first positional, got: %v", got)
+	}
+}
+
+// TestCompletionSyncSurfacesReposAndGroups mirrors the pull-completion test
+// for sync — same helper, same expectation.
+func TestCompletionSyncSurfacesReposAndGroups(t *testing.T) {
+	writeReposFixture(t, `repos:
+  default:
+    dir: /tmp/test-sync-completion
+    urls:
+      - git@github.com:sahil87/alpha.git
+`)
+
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "sync", "")
+	if err != nil {
+		t.Fatalf("__complete sync: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "default") {
+		t.Errorf("expected `default` in sync completion, got:\n%s", out)
+	}
+	if !strings.Contains(out, "alpha") {
+		t.Errorf("expected `alpha` in sync completion, got:\n%s", out)
+	}
+}
+
 func TestCompletionCloneSuppressesOnAllFlag(t *testing.T) {
 	writeReposFixture(t, completionYAML)
 
