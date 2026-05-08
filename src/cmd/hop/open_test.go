@@ -10,18 +10,16 @@ import (
 )
 
 // installFakeWt writes a fake `wt` shell script into a temp dir and prepends
-// that dir to PATH. The script's behavior is controlled by FAKE_WT_MODE in the
-// env (read by the script at runtime):
+// that dir to PATH. The script's behavior is controlled by FAKE_WT_MODE:
 //
-//	here  → write $PWD to $WT_CD_FILE, exit 0 (simulates user picking "Open here")
-//	noop  → do nothing, exit 0 (simulates editor/terminal launch)
+//	noop  → exit 0 (simulates user picking any non-failing menu option)
 //	fail  → exit 7 (simulates wt internal error)
 //
-// The script also writes a side-channel file `$FAKE_WT_LOG` recording $PWD,
-// $WT_CD_FILE, and $WT_WRAPPER so tests can assert what hop passed.
+// The script also writes a side-channel file at $FAKE_WT_LOG recording the
+// argv it received and the cwd it was launched from, so tests can assert
+// hop's invocation contract.
 //
-// Returns the path to the side-channel log; tests inspect it to verify hop's
-// invocation contract.
+// Returns the path to the side-channel log.
 func installFakeWt(t *testing.T, mode string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -31,14 +29,14 @@ func installFakeWt(t *testing.T, mode string) string {
 	script := `#!/bin/sh
 {
   echo "PWD=$PWD"
-  echo "WT_CD_FILE=$WT_CD_FILE"
-  echo "WT_WRAPPER=$WT_WRAPPER"
+  echo "ARGC=$#"
+  i=1
+  for a in "$@"; do
+    echo "ARG${i}=${a}"
+    i=$((i+1))
+  done
 } > "$FAKE_WT_LOG"
 case "$FAKE_WT_MODE" in
-  here)
-    printf '%s' "$PWD" > "$WT_CD_FILE"
-    exit 0
-    ;;
   noop)
     exit 0
     ;;
@@ -62,8 +60,8 @@ esac
 }
 
 // writeRepoFixture creates a hop.yaml fixture with a single repo named `name`
-// whose dir is a real, existing directory (so wt's chdir-to-repo succeeds).
-// Returns the resolved repo path.
+// whose dir is a real, existing directory (so wt's stat-the-arg branch
+// succeeds). Returns the resolved repo path.
 func writeRepoFixture(t *testing.T, name string) string {
 	t.Helper()
 	repoDir := filepath.Join(t.TempDir(), name)
@@ -80,56 +78,76 @@ func writeRepoFixture(t *testing.T, name string) string {
 	return repoDir
 }
 
-func TestOpenHereWritesPathToStdout(t *testing.T) {
+// TestOpenPassesRepoPathAsArgToWt asserts the binary execs `wt open <path>`
+// with the resolved repo path as a positional arg (not via cmd.Dir). This
+// is what makes wt take its path-first branch (showing the app menu) rather
+// than the worktree-selection menu it would show for a main-repo cwd with
+// no arg.
+//
+// Asserts both halves of the contract:
+//  1. wt receives ARG2 = repoDir (path passed as positional)
+//  2. wt's PWD is the caller's cwd, NOT repoDir (no chdir in hop)
+//
+// The PWD assertion guards against a regression that reintroduces cmd.Dir:
+// without it, a future change setting cmd.Dir = repo.Path would still make
+// wt see ARG2 = repoDir AND silently change wt's working directory.
+func TestOpenPassesRepoPathAsArgToWt(t *testing.T) {
 	repoDir := writeRepoFixture(t, "outbox")
-	logPath := installFakeWt(t, "here")
-	t.Setenv("HOP_WRAPPER", "1") // simulate shim-loaded environment
+	logPath := installFakeWt(t, "noop")
 
-	stdout, stderr, err := runArgs(t, "outbox", "open")
+	// Chdir to a known temp dir so we can distinguish "binary inherited the
+	// caller's cwd" from "binary chdir'd into repo.Path". t.TempDir() returns
+	// a fresh path that is neither repoDir nor any subdirectory of it.
+	callerDir := t.TempDir()
+	prevDir, err := os.Getwd()
 	if err != nil {
-		t.Fatalf("hop outbox open: %v\nstderr: %s", err, stderr.String())
+		t.Fatalf("getwd: %v", err)
 	}
-	got := stdout.String()
-	if got != repoDir {
-		t.Fatalf("expected stdout = %q, got %q", repoDir, got)
+	if err := os.Chdir(callerDir); err != nil {
+		t.Fatalf("chdir to %q: %v", callerDir, err)
 	}
-	// Verify hop passed the expected env to wt.
-	logBytes, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("read fake-wt log: %v", err)
-	}
-	log := string(logBytes)
-	if !strings.Contains(log, "PWD="+repoDir+"\n") {
-		t.Errorf("expected fake wt cwd = %q, log:\n%s", repoDir, log)
-	}
-	if !strings.Contains(log, "WT_WRAPPER=1\n") {
-		t.Errorf("expected WT_WRAPPER=1 in env, log:\n%s", log)
-	}
-	if !strings.Contains(log, "WT_CD_FILE=") {
-		t.Errorf("expected WT_CD_FILE in env, log:\n%s", log)
-	}
-}
-
-func TestOpenNoopDoesNotEmitStdout(t *testing.T) {
-	writeRepoFixture(t, "outbox")
-	installFakeWt(t, "noop")
-	t.Setenv("HOP_WRAPPER", "1")
+	t.Cleanup(func() { _ = os.Chdir(prevDir) })
 
 	stdout, stderr, err := runArgs(t, "outbox", "open")
 	if err != nil {
 		t.Fatalf("hop outbox open: %v\nstderr: %s", err, stderr.String())
 	}
 	if got := stdout.String(); got != "" {
-		t.Fatalf("expected empty stdout (no Open-here), got %q", got)
+		t.Errorf("expected empty stdout (binary is a passthrough), got %q", got)
+	}
+
+	logBytes, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read fake-wt log: %v", err)
+	}
+	log := string(logBytes)
+	if !strings.Contains(log, "ARGC=2\n") {
+		t.Errorf("expected wt to receive 2 args (open <path>), log:\n%s", log)
+	}
+	if !strings.Contains(log, "ARG1=open\n") {
+		t.Errorf("expected ARG1=open, log:\n%s", log)
+	}
+	if !strings.Contains(log, "ARG2="+repoDir+"\n") {
+		t.Errorf("expected ARG2=%q (resolved repo path), log:\n%s", repoDir, log)
+	}
+	// On macOS /tmp can resolve through /private; t.TempDir() returns the
+	// realpath, but os.Getwd after a chdir may surface either form. Rather
+	// than fight EvalSymlinks, just assert the negative: PWD is NOT repoDir.
+	// That's the regression we care about — a future cmd.Dir = repo.Path
+	// setter would make this assertion fire.
+	if strings.Contains(log, "PWD="+repoDir+"\n") {
+		t.Errorf("expected wt PWD != repoDir (binary should not chdir; it passes the path as an arg), log:\n%s", log)
 	}
 }
 
+// TestOpenPropagatesNonZeroExitCode asserts hop's exit code matches wt's
+// when wt exits non-zero, AND that hop emits no stdout in that case (the
+// transparent-passthrough contract holds on the failure path too).
 func TestOpenPropagatesNonZeroExitCode(t *testing.T) {
 	writeRepoFixture(t, "outbox")
 	installFakeWt(t, "fail")
-	t.Setenv("HOP_WRAPPER", "1")
 
-	_, _, err := runArgs(t, "outbox", "open")
+	stdout, _, err := runArgs(t, "outbox", "open")
 	if err == nil {
 		t.Fatalf("expected non-nil error from wt fail mode")
 	}
@@ -140,11 +158,16 @@ func TestOpenPropagatesNonZeroExitCode(t *testing.T) {
 	if withCode.code != 7 {
 		t.Fatalf("expected exit 7 propagated from fake wt, got %d", withCode.code)
 	}
+	if got := stdout.String(); got != "" {
+		t.Errorf("expected empty stdout on wt failure (binary is a passthrough), got %q", got)
+	}
 }
 
+// TestOpenWtMissingExitsSilent asserts that when wt is not on PATH, hop
+// emits a clean stderr hint and exits 1 via errSilent (no traceback, no
+// crash).
 func TestOpenWtMissingExitsSilent(t *testing.T) {
 	writeRepoFixture(t, "outbox")
-	// Set PATH to a single empty dir so `wt` is not findable.
 	emptyDir := t.TempDir()
 	t.Setenv("PATH", emptyDir)
 
@@ -157,68 +180,19 @@ func TestOpenWtMissingExitsSilent(t *testing.T) {
 	}
 }
 
-func TestOpenHereWithoutShimEmitsHint(t *testing.T) {
-	repoDir := writeRepoFixture(t, "outbox")
-	installFakeWt(t, "here")
-	// Empty HOP_WRAPPER simulates binary-direct invocation: the runtime check is
-	// `!= "1"`, so an empty string takes the no-shim branch. t.Setenv (rather
-	// than os.Unsetenv) is used so the prior value is restored on test cleanup
-	// and cannot leak into later tests in the same package.
-	t.Setenv("HOP_WRAPPER", "")
-
-	stdout, stderr, err := runArgs(t, "outbox", "open")
-	if err != nil {
-		t.Fatalf("hop outbox open: %v\nstderr: %s", err, stderr.String())
-	}
-	if got := stdout.String(); got != repoDir {
-		t.Fatalf("expected stdout = %q, got %q", repoDir, got)
-	}
-	if !strings.Contains(stderr.String(), "shell shim") {
-		t.Errorf("expected no-shim hint in stderr, got: %s", stderr.String())
-	}
-}
-
-func TestOpenHereWithShimSuppressesHint(t *testing.T) {
+// TestOpenSilentOnSuccess asserts hop emits no stdout on the wt-success
+// path. The cd-handoff is owned by the shim (via WT_CD_FILE), not the
+// binary — the binary is a transparent passthrough. The wt-failure path's
+// stdout behavior is asserted by TestOpenPropagatesNonZeroExitCode.
+func TestOpenSilentOnSuccess(t *testing.T) {
 	writeRepoFixture(t, "outbox")
-	installFakeWt(t, "here")
-	t.Setenv("HOP_WRAPPER", "1")
+	installFakeWt(t, "noop")
 
-	_, stderr, err := runArgs(t, "outbox", "open")
+	stdout, _, err := runArgs(t, "outbox", "open")
 	if err != nil {
-		t.Fatalf("hop outbox open: %v\nstderr: %s", err, stderr.String())
-	}
-	if strings.Contains(stderr.String(), "shell shim") {
-		t.Errorf("expected NO no-shim hint when HOP_WRAPPER=1, got: %s", stderr.String())
-	}
-}
-
-// TestOpenCleansUpTempFile asserts the WT_CD_FILE temp path is removed by
-// runOpen's defer os.Remove. The fake wt records the path in its log; we
-// extract it post-invocation and check the file no longer exists.
-func TestOpenCleansUpTempFile(t *testing.T) {
-	writeRepoFixture(t, "outbox")
-	logPath := installFakeWt(t, "here")
-	t.Setenv("HOP_WRAPPER", "1")
-
-	if _, _, err := runArgs(t, "outbox", "open"); err != nil {
 		t.Fatalf("hop outbox open: %v", err)
 	}
-	logBytes, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("read fake-wt log: %v", err)
-	}
-	// Extract the WT_CD_FILE value.
-	var cdPath string
-	for _, line := range strings.Split(string(logBytes), "\n") {
-		if strings.HasPrefix(line, "WT_CD_FILE=") {
-			cdPath = strings.TrimPrefix(line, "WT_CD_FILE=")
-			break
-		}
-	}
-	if cdPath == "" {
-		t.Fatalf("no WT_CD_FILE recorded in fake-wt log:\n%s", string(logBytes))
-	}
-	if _, err := os.Stat(cdPath); !os.IsNotExist(err) {
-		t.Fatalf("expected WT_CD_FILE %q to be cleaned up post-invocation; stat err=%v", cdPath, err)
+	if got := stdout.String(); got != "" {
+		t.Fatalf("expected empty stdout (binary passthrough), got %q", got)
 	}
 }

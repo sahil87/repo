@@ -22,7 +22,7 @@ import (
 //     $# == 1                                         → _hop_dispatch cd "$1" (bare-name → cd)
 //     $# >= 2 and $2 == "cd"                          → _hop_dispatch cd "$1" (explicit cd verb)
 //     $# >= 2 and $2 == "where"                       → command hop "$1" where (binary handles)
-//     $# >= 2 and $2 == "open"                        → _hop_dispatch open "$1" (open-verb; "Open here" cds the parent shell via stdout capture)
+//     $# >= 2 and $2 == "open"                        → _hop_dispatch open "$1" (open-verb; "Open here" cds the parent shell via WT_CD_FILE temp file)
 //     $# >= 2 and $2 == "-R"                          → command hop -R "$1" "${@:3}" (canonical exec form)
 //     otherwise                                       → command hop -R "$1" "$2" "${@:3}" (tool-form sugar)
 //
@@ -36,14 +36,6 @@ const posixInit = `# hop shell integration — emit via: eval "$(hop shell-init 
 # Installs: hop function (with bare-name dispatch + verb dispatch + tool-form), h alias, hi alias, completion.
 
 hop() {
-  # HOP_WRAPPER=1 signals to the binary that the shell shim is wrapping the
-  # call. Used by the open verb's "Open here" path to suppress the no-shim
-  # hint when the shim will handle the parent-shell cd via stdout capture.
-  # Scoped to hop() (and _hop_dispatch, which inherits this function-local
-  # exported var) so that hi() — which deliberately bypasses the shim — does
-  # not inherit it. local -x is supported by both zsh and bash and unsets the
-  # var on function return.
-  local -x HOP_WRAPPER=1
   if [[ $# -eq 0 ]]; then
     command hop
     return $?
@@ -112,11 +104,28 @@ _hop_dispatch() {
       ;;
     open)
       # Caller passes $2 as the repo name (verb-dispatch in hop() pre-validated $#==2).
-      # The binary delegates to wt's menu and prints a path on stdout iff the user
-      # picked "Open here"; for editor/terminal/etc. choices stdout is empty and we
-      # do not cd.
-      local target
-      target="$(command hop "$2" open)" || return $?
+      # The binary execs wt with the resolved path; wt presents an interactive
+      # menu on the user's terminal. For "Open here", wt writes the path to
+      # the file named by WT_CD_FILE — for editors/terminals/etc. the file
+      # stays empty.
+      #
+      # We can NOT capture the binary's stdout here (with $(...)) because wt
+      # is interactive: capturing stdout would swallow its menu and leave the
+      # user staring at a blank prompt while wt waits on stdin. The temp-file
+      # mechanism keeps wt's stdio fully connected to the user's terminal and
+      # routes the cd-target through a side channel.
+      local cdfile target rc
+      cdfile="$(mktemp -t hop-open-cd.XXXXXX)" || return $?
+      target=""
+      WT_CD_FILE="$cdfile" WT_WRAPPER=1 command hop "$2" open
+      rc=$?
+      if [[ -s "$cdfile" ]]; then
+        target="$(cat "$cdfile")"
+      fi
+      rm -f "$cdfile"
+      if (( rc != 0 )); then
+        return $rc
+      fi
       if [[ -n "$target" ]]; then
         cd -- "$target"
       fi

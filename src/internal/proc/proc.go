@@ -110,24 +110,14 @@ func ExitCode(err error) (int, bool) {
 // (binary not found, dir does not exist, or other I/O error), code is -1 and
 // error is non-nil. Use errors.Is(err, ErrNotFound) to detect missing binary.
 //
-// Used by `hop -R <name> <cmd>...` to delegate to a child command in a
-// resolved repo's directory.
-func RunForeground(ctx context.Context, dir, name string, args ...string) (int, error) {
-	return RunForegroundEnv(ctx, dir, nil, name, args...)
-}
-
-// RunForegroundEnv is RunForeground with an explicit env override. When env is
-// nil, the subprocess inherits the parent's environment (identical to
-// RunForeground). When env is non-nil, the subprocess sees exactly those
-// entries — callers SHOULD start from os.Environ() and append/override entries
-// to extend the parent env rather than replace it.
+// When dir is "", the subprocess inherits the parent's working directory.
+// The subprocess always inherits the parent's environment.
 //
-// Used by `hop <name> open` to set WT_CD_FILE and WT_WRAPPER on top of the
-// parent env when delegating to wt.
-func RunForegroundEnv(ctx context.Context, dir string, env []string, name string, args ...string) (int, error) {
+// Used by `hop -R <name> <cmd>...` (resolved repo dir) and `hop <name> open`
+// (forwards a path arg to wt rather than chdir'ing — passes "" for dir).
+func RunForeground(ctx context.Context, dir, name string, args ...string) (int, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
-	cmd.Env = env
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
