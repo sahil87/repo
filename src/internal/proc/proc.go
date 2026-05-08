@@ -110,7 +110,7 @@ func ExitCode(err error) (int, bool) {
 // (binary not found, dir does not exist, or other I/O error), code is -1 and
 // error is non-nil. Use errors.Is(err, ErrNotFound) to detect missing binary.
 //
-// Used by `hop -C <name> <cmd>...` to delegate to a child command in a
+// Used by `hop -R <name> <cmd>...` to delegate to a child command in a
 // resolved repo's directory.
 func RunForeground(ctx context.Context, dir, name string, args ...string) (int, error) {
 	return RunForegroundEnv(ctx, dir, nil, name, args...)

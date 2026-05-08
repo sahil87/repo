@@ -35,12 +35,15 @@ import (
 const posixInit = `# hop shell integration — emit via: eval "$(hop shell-init <shell>)"
 # Installs: hop function (with bare-name dispatch + verb dispatch + tool-form), h alias, hi alias, completion.
 
-# HOP_WRAPPER=1 signals to the binary that the shell shim is wrapping the call.
-# Used by the open verb's "Open here" path to suppress the no-shim hint when
-# the shim will handle the parent-shell cd via stdout capture.
-export HOP_WRAPPER=1
-
 hop() {
+  # HOP_WRAPPER=1 signals to the binary that the shell shim is wrapping the
+  # call. Used by the open verb's "Open here" path to suppress the no-shim
+  # hint when the shim will handle the parent-shell cd via stdout capture.
+  # Scoped to hop() (and _hop_dispatch, which inherits this function-local
+  # exported var) so that hi() — which deliberately bypasses the shim — does
+  # not inherit it. local -x is supported by both zsh and bash and unsets the
+  # var on function return.
+  local -x HOP_WRAPPER=1
   if [[ $# -eq 0 ]]; then
     command hop
     return $?

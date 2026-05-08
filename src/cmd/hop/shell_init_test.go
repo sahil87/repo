@@ -473,10 +473,12 @@ func TestShellInitUnsupportedShell(t *testing.T) {
 	}
 }
 
-// TestShellInitExportsHopWrapper asserts the shim sets HOP_WRAPPER=1 in the
-// environment so the binary can detect when it's running under the shim
-// (suppresses the "Open here" no-shim hint).
-func TestShellInitExportsHopWrapper(t *testing.T) {
+// TestShellInitScopesHopWrapperToHopFunction asserts the shim sets
+// HOP_WRAPPER=1 only within the hop() function (via `local -x`), not at the
+// top level. This ensures hi() — which deliberately bypasses the shim — does
+// not inherit HOP_WRAPPER, so the binary can reliably detect direct
+// invocation and emit the "Open here" no-shim hint.
+func TestShellInitScopesHopWrapperToHopFunction(t *testing.T) {
 	rootForCompletion = newRootCmd()
 	defer func() { rootForCompletion = nil }()
 
@@ -484,8 +486,12 @@ func TestShellInitExportsHopWrapper(t *testing.T) {
 	if err != nil {
 		t.Fatalf("shell-init zsh: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "export HOP_WRAPPER=1") {
-		t.Fatalf("expected `export HOP_WRAPPER=1`, got:\n%s", stdout.String())
+	out := stdout.String()
+	if !strings.Contains(out, "local -x HOP_WRAPPER=1") {
+		t.Fatalf("expected `local -x HOP_WRAPPER=1` inside hop(), got:\n%s", out)
+	}
+	if strings.Contains(out, "export HOP_WRAPPER=1") {
+		t.Fatalf("expected NO top-level `export HOP_WRAPPER=1` (would leak to hi()), got:\n%s", out)
 	}
 }
 

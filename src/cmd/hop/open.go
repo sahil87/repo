@@ -47,16 +47,24 @@ func runOpen(cmd *cobra.Command, name string) error {
 		return errSilent
 	}
 
+	// On non-zero exit, do not read or emit the cd file: a partial write paired
+	// with a failed wt run would otherwise mislead the shim into cd'ing as if
+	// the open succeeded. Propagate the exit code and let the caller see the
+	// failure.
+	if code != 0 {
+		return &errExitCode{code: code}
+	}
+
 	contents, readErr := os.ReadFile(cdPath)
-	if readErr == nil && len(contents) > 0 {
+	if readErr != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "hop: open: read cd file: %v\n", readErr)
+		return errSilent
+	}
+	if len(contents) > 0 {
 		fmt.Fprint(cmd.OutOrStdout(), string(contents))
 		if os.Getenv("HOP_WRAPPER") != "1" {
 			fmt.Fprintln(cmd.ErrOrStderr(), openHereNoShimHint)
 		}
-	}
-
-	if code != 0 {
-		return &errExitCode{code: code}
 	}
 	return nil
 }

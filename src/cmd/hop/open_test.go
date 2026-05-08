@@ -160,8 +160,11 @@ func TestOpenWtMissingExitsSilent(t *testing.T) {
 func TestOpenHereWithoutShimEmitsHint(t *testing.T) {
 	repoDir := writeRepoFixture(t, "outbox")
 	installFakeWt(t, "here")
-	// Explicitly unset HOP_WRAPPER to simulate binary-direct invocation.
-	os.Unsetenv("HOP_WRAPPER")
+	// Empty HOP_WRAPPER simulates binary-direct invocation: the runtime check is
+	// `!= "1"`, so an empty string takes the no-shim branch. t.Setenv (rather
+	// than os.Unsetenv) is used so the prior value is restored on test cleanup
+	// and cannot leak into later tests in the same package.
+	t.Setenv("HOP_WRAPPER", "")
 
 	stdout, stderr, err := runArgs(t, "outbox", "open")
 	if err != nil {

@@ -389,6 +389,23 @@ func TestCompletionThirdPositionalSuppressed(t *testing.T) {
 	}
 }
 
+// TestCompletionCloneSuppressesAfterPositional asserts that `hop clone <name>
+// <TAB>` returns no candidates. clone delegates to completeRepoNames via
+// completeCloneArg, but the repo-verb candidates (cd/where/open) only apply to
+// the root command's $2 — clone has at most one positional, so a second
+// argument should suggest nothing rather than the verb set.
+func TestCompletionCloneSuppressesAfterPositional(t *testing.T) {
+	writeReposFixture(t, completionYAML)
+
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "clone", "alpha", "")
+	if err != nil {
+		t.Fatalf("__complete clone alpha: %v", err)
+	}
+	if got := candidatesFrom(stdout.String()); len(got) > 0 {
+		t.Fatalf("expected no candidates after first positional on clone, got: %v", got)
+	}
+}
+
 func TestCompletionCloneSuppressesOnAllFlag(t *testing.T) {
 	writeReposFixture(t, completionYAML)
 
