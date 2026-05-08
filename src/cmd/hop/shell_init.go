@@ -48,7 +48,7 @@ hop() {
       # __complete through the bare-name dispatcher and treat it as a repo name.
       command hop "$@"
       ;;
-    clone|pull|sync|ls|shell-init|config|update|help|--help|-h|--version|completion)
+    clone|pull|push|sync|ls|shell-init|config|update|help|--help|-h|--version|completion)
       _hop_dispatch "$@"
       ;;
     -*)
