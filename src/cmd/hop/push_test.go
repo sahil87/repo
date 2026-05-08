@@ -7,30 +7,13 @@ import (
 	"testing"
 )
 
-// pushYAMLFixture mirrors pullSyncYAMLFixture but is named separately so the
-// push tests are self-describing. The YAML shape (default + vendor groups,
-// three repos in YAML source order) is identical because push reuses the same
-// resolver and runBatch pipeline.
-func pushYAMLFixture(t *testing.T) (configPath, defaultDir, vendorDir string) {
-	t.Helper()
-	defaultDir = t.TempDir()
-	vendorDir = t.TempDir()
-	yaml := "repos:\n" +
-		"  default:\n" +
-		"    dir: " + defaultDir + "\n" +
-		"    urls:\n" +
-		"      - git@github.com:sahil87/alpha.git\n" +
-		"      - git@github.com:sahil87/beta.git\n" +
-		"  vendor:\n" +
-		"    dir: " + vendorDir + "\n" +
-		"    urls:\n" +
-		"      - git@github.com:vendor/gamma.git\n"
-	configPath = writeReposFixture(t, yaml)
-	return configPath, defaultDir, vendorDir
-}
+// push tests reuse pullSyncYAMLFixture (defined in pull_test.go) — push shares
+// the same resolver/runBatch pipeline as pull and sync, so the registry shape
+// is identical. Keeping a single fixture avoids drift if the test registry
+// shape ever changes.
 
 func TestPushUsageErrorWhenNoArgsAndNoAll(t *testing.T) {
-	_, _, _ = pushYAMLFixture(t)
+	_, _, _ = pullSyncYAMLFixture(t)
 
 	_, _, err := runArgs(t, "push")
 	if err == nil {
@@ -42,7 +25,7 @@ func TestPushUsageErrorWhenNoArgsAndNoAll(t *testing.T) {
 }
 
 func TestPushUsageErrorWhenAllAndPositional(t *testing.T) {
-	_, _, _ = pushYAMLFixture(t)
+	_, _, _ = pullSyncYAMLFixture(t)
 
 	_, _, err := runArgs(t, "push", "alpha", "--all")
 	if err == nil {
@@ -54,7 +37,7 @@ func TestPushUsageErrorWhenAllAndPositional(t *testing.T) {
 }
 
 func TestPushSingleNotClonedExitsWithSkipMessage(t *testing.T) {
-	_, defaultDir, _ := pushYAMLFixture(t)
+	_, defaultDir, _ := pullSyncYAMLFixture(t)
 	// Don't pre-create .git for alpha — it's not cloned.
 	_ = defaultDir
 
@@ -68,7 +51,7 @@ func TestPushSingleNotClonedExitsWithSkipMessage(t *testing.T) {
 }
 
 func TestPushBatchGroupSkipsNotClonedAndReportsSummary(t *testing.T) {
-	_, defaultDir, _ := pushYAMLFixture(t)
+	_, defaultDir, _ := pullSyncYAMLFixture(t)
 	// Neither alpha nor beta has a .git dir — both should be skipped.
 	_ = defaultDir
 
@@ -89,7 +72,7 @@ func TestPushBatchGroupSkipsNotClonedAndReportsSummary(t *testing.T) {
 }
 
 func TestPushBatchAllIteratesAllRepos(t *testing.T) {
-	_, _, _ = pushYAMLFixture(t)
+	_, _, _ = pullSyncYAMLFixture(t)
 
 	_, stderr, err := runArgs(t, "push", "--all")
 	if err != nil {
@@ -107,7 +90,7 @@ func TestPushBatchAllIteratesAllRepos(t *testing.T) {
 }
 
 func TestPushBatchOutputOrderMatchesYAMLSourceOrder(t *testing.T) {
-	_, _, _ = pushYAMLFixture(t)
+	_, _, _ = pullSyncYAMLFixture(t)
 
 	_, stderr, _ := runArgs(t, "push", "--all")
 	out := stderr.String()
@@ -120,7 +103,7 @@ func TestPushBatchOutputOrderMatchesYAMLSourceOrder(t *testing.T) {
 }
 
 func TestPushBatchGroupOnlyIncludesGroupMembers(t *testing.T) {
-	_, _, _ = pushYAMLFixture(t)
+	_, _, _ = pullSyncYAMLFixture(t)
 
 	_, stderr, _ := runArgs(t, "push", "vendor")
 	out := stderr.String()
@@ -136,7 +119,7 @@ func TestPushBatchGroupOnlyIncludesGroupMembers(t *testing.T) {
 }
 
 func TestPushStdoutIsEmpty(t *testing.T) {
-	_, _, _ = pushYAMLFixture(t)
+	_, _, _ = pullSyncYAMLFixture(t)
 
 	stdout, _, _ := runArgs(t, "push", "--all")
 	if got := stdout.String(); got != "" {
@@ -145,7 +128,7 @@ func TestPushStdoutIsEmpty(t *testing.T) {
 }
 
 func TestPushCobraRejectsTwoPositionals(t *testing.T) {
-	_, _, _ = pushYAMLFixture(t)
+	_, _, _ = pullSyncYAMLFixture(t)
 
 	_, _, err := runArgs(t, "push", "alpha", "beta")
 	if err == nil {
