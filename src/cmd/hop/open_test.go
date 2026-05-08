@@ -83,9 +83,30 @@ func writeRepoFixture(t *testing.T, name string) string {
 // is what makes wt take its path-first branch (showing the app menu) rather
 // than the worktree-selection menu it would show for a main-repo cwd with
 // no arg.
+//
+// Asserts both halves of the contract:
+//  1. wt receives ARG2 = repoDir (path passed as positional)
+//  2. wt's PWD is the caller's cwd, NOT repoDir (no chdir in hop)
+//
+// The PWD assertion guards against a regression that reintroduces cmd.Dir:
+// without it, a future change setting cmd.Dir = repo.Path would still make
+// wt see ARG2 = repoDir AND silently change wt's working directory.
 func TestOpenPassesRepoPathAsArgToWt(t *testing.T) {
 	repoDir := writeRepoFixture(t, "outbox")
 	logPath := installFakeWt(t, "noop")
+
+	// Chdir to a known temp dir so we can distinguish "binary inherited the
+	// caller's cwd" from "binary chdir'd into repo.Path". t.TempDir() returns
+	// a fresh path that is neither repoDir nor any subdirectory of it.
+	callerDir := t.TempDir()
+	prevDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(callerDir); err != nil {
+		t.Fatalf("chdir to %q: %v", callerDir, err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prevDir) })
 
 	stdout, stderr, err := runArgs(t, "outbox", "open")
 	if err != nil {
@@ -109,15 +130,24 @@ func TestOpenPassesRepoPathAsArgToWt(t *testing.T) {
 	if !strings.Contains(log, "ARG2="+repoDir+"\n") {
 		t.Errorf("expected ARG2=%q (resolved repo path), log:\n%s", repoDir, log)
 	}
+	// On macOS /tmp can resolve through /private; t.TempDir() returns the
+	// realpath, but os.Getwd after a chdir may surface either form. Rather
+	// than fight EvalSymlinks, just assert the negative: PWD is NOT repoDir.
+	// That's the regression we care about — a future cmd.Dir = repo.Path
+	// setter would make this assertion fire.
+	if strings.Contains(log, "PWD="+repoDir+"\n") {
+		t.Errorf("expected wt PWD != repoDir (binary should not chdir; it passes the path as an arg), log:\n%s", log)
+	}
 }
 
 // TestOpenPropagatesNonZeroExitCode asserts hop's exit code matches wt's
-// when wt exits non-zero.
+// when wt exits non-zero, AND that hop emits no stdout in that case (the
+// transparent-passthrough contract holds on the failure path too).
 func TestOpenPropagatesNonZeroExitCode(t *testing.T) {
 	writeRepoFixture(t, "outbox")
 	installFakeWt(t, "fail")
 
-	_, _, err := runArgs(t, "outbox", "open")
+	stdout, _, err := runArgs(t, "outbox", "open")
 	if err == nil {
 		t.Fatalf("expected non-nil error from wt fail mode")
 	}
@@ -127,6 +157,9 @@ func TestOpenPropagatesNonZeroExitCode(t *testing.T) {
 	}
 	if withCode.code != 7 {
 		t.Fatalf("expected exit 7 propagated from fake wt, got %d", withCode.code)
+	}
+	if got := stdout.String(); got != "" {
+		t.Errorf("expected empty stdout on wt failure (binary is a passthrough), got %q", got)
 	}
 }
 
@@ -147,9 +180,10 @@ func TestOpenWtMissingExitsSilent(t *testing.T) {
 	}
 }
 
-// TestOpenSilentOnSuccess asserts hop emits no stdout regardless of whether
-// wt exits 0 or non-zero. The cd-handoff is owned by the shim (via
-// WT_CD_FILE), not the binary — the binary is a transparent passthrough.
+// TestOpenSilentOnSuccess asserts hop emits no stdout on the wt-success
+// path. The cd-handoff is owned by the shim (via WT_CD_FILE), not the
+// binary — the binary is a transparent passthrough. The wt-failure path's
+// stdout behavior is asserted by TestOpenPropagatesNonZeroExitCode.
 func TestOpenSilentOnSuccess(t *testing.T) {
 	writeRepoFixture(t, "outbox")
 	installFakeWt(t, "noop")
