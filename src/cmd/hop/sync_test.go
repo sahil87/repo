@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -114,8 +115,8 @@ func configureGitIdentity(t *testing.T, repoPath string) {
 	}
 }
 
-// stageDirtyTracked appends content to a tracked file in repoPath, leaving
-// `git status --porcelain` non-empty (one " M" entry).
+// stageDirtyTracked overwrites a tracked file in repoPath with new content,
+// leaving `git status --porcelain` non-empty (one " M" entry).
 func stageDirtyTracked(t *testing.T, repoPath, name string) {
 	t.Helper()
 	path := filepath.Join(repoPath, name)
@@ -627,6 +628,12 @@ func TestSyncFlagRejectedOnPull(t *testing.T) {
 // named clones in the same fixture group without collisions.
 func initNamedBareRepoWithCommit(t *testing.T, dir, name string) string {
 	t.Helper()
+	// Mirror initBareRepo's guard so this helper degrades the same way when
+	// git is absent (skip rather than fail) — keeps the test suite consistent
+	// across all init* helpers.
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("setup tmp %s: %v", dir, err)
 	}

@@ -251,11 +251,19 @@ func commitDirtyTree(cmd *cobra.Command, r repos.Repo, message string) (committe
 
 	addCtx, addCancel := context.WithTimeout(context.Background(), cloneTimeout)
 	defer addCancel()
-	if _, _, addErr := proc.RunCaptureBoth(addCtx, r.Path, "git", "add", "--all"); addErr != nil {
+	_, addStderr, addErr := proc.RunCaptureBoth(addCtx, r.Path, "git", "add", "--all")
+	if addErr != nil {
 		if errors.Is(addErr, proc.ErrNotFound) {
 			return false, true, addErr
 		}
-		fmt.Fprintf(cmd.ErrOrStderr(), "sync: %s ✗ commit failed: %v\n", r.Name, addErr)
+		// Prefer git's own last stderr line over the bare exec error string —
+		// matches the commit-step branch below and the existing `pull.go`
+		// lastNonEmptyLine convention.
+		detail := lastNonEmptyLine(string(addStderr))
+		if detail == "" {
+			detail = addErr.Error()
+		}
+		fmt.Fprintf(cmd.ErrOrStderr(), "sync: %s ✗ commit failed: %s\n", r.Name, detail)
 		return false, false, addErr
 	}
 

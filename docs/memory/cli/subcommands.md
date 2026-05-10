@@ -224,7 +224,7 @@ Any step's failure aborts that repo's sync and counts toward `failed` in batch m
 
 **`hop push` is intentionally NOT changed** — see the inventory row above. The asymmetry exists because pushing without rebasing is the riskier op; `hop sync` is the safe verb because it always rebases first.
 
-Helper: `commitDirtyTree(ctx, path, msg)` lives inline in `sync.go` (not extracted to a shared file). If a future subcommand needs the same shape, extract then.
+Helper: `commitDirtyTree` lives inline in `sync.go` (not extracted to a shared file). It encapsulates the `status → add → commit` sequence above, distinguishes a clean tree from a real failure, and emits the `sync: <name> ✗ commit failed: <detail>` line on its own so callers don't duplicate it. If a future subcommand needs the same shape, extract then.
 
 ## `hop update` — self-update via Homebrew
 
