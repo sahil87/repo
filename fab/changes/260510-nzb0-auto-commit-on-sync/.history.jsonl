@@ -1,0 +1,20 @@
+{"action":"enter","driver":"fab-new","event":"stage-transition","stage":"intake","ts":"2026-05-10T05:28:18Z"}
+{"args":"hop sync auto-commits dirty trees before pull/push, replacing the xpush bash helper. Default behavior (no flag), -m overrides commit message, default message 'chore: sync via hop', uses git add --all, respects pre-commit hooks, hop push unchanged.","cmd":"fab-new","event":"command","ts":"2026-05-10T05:28:18Z"}
+{"delta":"+2.2","event":"confidence","score":2.2,"trigger":"calc-score","ts":"2026-05-10T05:29:59Z"}
+{"delta":"+0.0","event":"confidence","score":2.2,"trigger":"calc-score","ts":"2026-05-10T05:30:15Z"}
+{"delta":"+2.8","event":"confidence","score":5,"trigger":"calc-score","ts":"2026-05-10T10:26:46Z"}
+{"delta":"+0.0","event":"confidence","score":5,"trigger":"calc-score","ts":"2026-05-10T10:26:51Z"}
+{"cmd":"fab-fff","event":"command","ts":"2026-05-10T10:27:18Z"}
+{"delta":"+0.0","event":"confidence","score":5,"trigger":"calc-score","ts":"2026-05-10T10:31:56Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"spec","ts":"2026-05-10T10:32:01Z"}
+{"delta":"+0.0","event":"confidence","score":5,"trigger":"calc-score","ts":"2026-05-10T10:32:03Z"}
+{"cmd":"fab-continue","event":"command","ts":"2026-05-10T10:35:09Z"}
+{"action":"enter","driver":"fab-continue","event":"stage-transition","stage":"apply","ts":"2026-05-10T10:35:15Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"review","ts":"2026-05-10T10:42:15Z"}
+{"cmd":"fab-continue","event":"command","ts":"2026-05-10T10:43:50Z"}
+{"event":"review","result":"failed","ts":"2026-05-10T10:48:09Z"}
+{"action":"re-entry","driver":"fab-fff","event":"stage-transition","stage":"apply","ts":"2026-05-10T10:48:09Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"review","ts":"2026-05-10T10:51:20Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"hydrate","ts":"2026-05-10T10:54:08Z"}
+{"event":"review","result":"passed","ts":"2026-05-10T10:54:08Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"ship","ts":"2026-05-10T10:57:18Z"}

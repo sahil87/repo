@@ -1,0 +1,40 @@
+id: nzb0
+name: 260510-nzb0-auto-commit-on-sync
+created: 2026-05-10T05:28:18Z
+created_by: sahil-weaver
+change_type: fix
+issues: []
+progress:
+    intake: done
+    spec: done
+    apply: done
+    review: done
+    hydrate: done
+    ship: active
+    review-pr: pending
+plan:
+    generated: true
+    task_count: 6
+    acceptance_count: 16
+    acceptance_completed: 16
+confidence:
+    certain: 22
+    confident: 0
+    tentative: 0
+    unresolved: 0
+    score: 5.0
+    fuzzy: true
+    dimensions:
+        signal: 95.0
+        reversibility: 84.5
+        competence: 91.4
+        disambiguation: 87.7
+stage_metrics:
+    intake: {started_at: "2026-05-10T05:28:18Z", driver: fab-new, iterations: 1, completed_at: "2026-05-10T10:32:01Z"}
+    spec: {started_at: "2026-05-10T10:32:01Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-10T10:35:15Z"}
+    apply: {started_at: "2026-05-10T10:48:09Z", driver: fab-fff, iterations: 2, completed_at: "2026-05-10T10:51:20Z"}
+    review: {started_at: "2026-05-10T10:51:20Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-10T10:54:08Z"}
+    hydrate: {started_at: "2026-05-10T10:54:08Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-10T10:57:18Z"}
+    ship: {started_at: "2026-05-10T10:57:18Z", driver: fab-fff, iterations: 1}
+prs: []
+last_updated: 2026-05-10T10:57:18Z
