@@ -74,6 +74,8 @@ eval "$(hop shell-init bash)"  # in ~/.bashrc
 
 This installs the `hop` shell function, the `h` and `hi` aliases, the bare-name dispatcher, the `hop <name> <tool>` tool-form sugar, and tab completion. Without it, the binary still works — it just can't change your parent shell's directory (a Unix constraint, not a hop limitation). See [Gotchas](#gotchas) for the shim-vs-binary details.
 
+> 💡 Have other sahil87 tools? [`shll shell-install`](https://github.com/sahil87/shll#shll-shell-install--wire-the-rc-file-recommended) handles all of their shell integrations and autocompletions at once.
+
 ## First run
 
 Bootstrap a starter `hop.yaml`:
