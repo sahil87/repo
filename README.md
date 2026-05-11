@@ -35,8 +35,6 @@ just install
 
 Builds the binary and copies it to `~/.local/bin/hop`. Make sure that directory is on your `$PATH`.
 
-> **macOS Gatekeeper note**: tarball releases are not signed. Run `xattr -d com.apple.quarantine /path/to/hop` once after extracting, or use the Homebrew install above (brew strips the quarantine attribute).
-
 ## Shell integration
 
 The shell shim is what makes `hop <name>` actually `cd` your shell. Install it once:
@@ -116,7 +114,7 @@ $ pwd
 A few useful variants:
 
 ```sh
-hop dotfiles cursor                  # open dotfiles in Cursor
+hop dotfiles cursor .                # open dotfiles in Cursor (the trailing . matters — see Gotchas)
 hop infra-tf terraform plan          # run terraform inside infra-tf
 hop outbox -R jq '.foo' file.json    # explicit -R form: same effect, clearer in scripts
 hop outbox open                      # delegates to wt's app menu (editor / terminal / cd here)
@@ -180,6 +178,7 @@ A flat list (`default` above) uses convention: each URL lands at `<code_root>/<o
 - **Tool-form (`hop <name> <tool>`) is shim-only too.** The shim rewrites it to `hop -R <name> <tool>` before the binary sees it. In scripts and CI, use the binary-direct form `hop -R <name> <tool> ...` (and `hop <name> where` for path resolution — that one's handled by the binary).
 - **Substring match is on the repo name only.** Not URL, not path, not group. `hop ot` matches `outbox` but not the URL `git@github.com:org/outbox.git`. When two repos in different groups share a name, the picker shows `name [group]` to disambiguate.
 - **No `--force` on `push` or `sync`.** Intentional — for nuanced single-repo cases, reach for `hop <name> -R git push --force` and you'll get the full git output. The batch wrappers stay safe by default.
+- **`hop <name> cursor` / `code` need a trailing `.`** — e.g. `hop dotfiles cursor .`. Not a hop quirk: both editors take `[paths...]` as positional args and, when invoked with none, restore the previously open folder instead of opening the cwd. The `.` is what tells them "open *this* directory." Tools that operate on cwd by default (`git status`, `terraform plan`, `ls`, `npm test`) don't need it.
 
 ## Reference
 
