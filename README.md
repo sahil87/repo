@@ -15,6 +15,34 @@ A small Go CLI that turns one config file (`hop.yaml`) into a personal directory
 - **Bootstrap from disk, not yaml-by-hand** — `hop config scan ~/code` walks your existing clones, reads `git remote`, and populates `hop.yaml` for you. Comment-preserving merges, idempotent re-runs.
 - **Plays nicely with [`wt`](https://github.com/sahil87/wt)** — `hop <name> open` delegates to wt's app menu, so you get the same "open in editor / terminal / file manager / cd here" experience for every repo in the registry.
 
+## The mental model
+
+Three blocks. The repo name is the anchor — same color in both rows, so you can see it move between forms.
+
+> **Colored half** = what you type · **grey half** = what the `h` alias or tab completion fills in.
+
+**General form:**
+
+![hop](https://img.shields.io/badge/h-op-9ca3af?labelColor=1f6feb&style=for-the-badge) ![arrow](https://img.shields.io/badge/-%E2%86%92-lightgrey?style=for-the-badge) ![repo](https://img.shields.io/badge/re-po--name-9ca3af?labelColor=7c3aed&style=for-the-badge) ![arrow](https://img.shields.io/badge/-%E2%86%92-lightgrey?style=for-the-badge) ![cmd](https://img.shields.io/badge/command-059669?style=for-the-badge)
+
+```sh
+h  out<TAB>     cursor .            # → hop outbox cursor .
+h  dot<TAB>     ls -la              # → hop dotfiles ls -la
+```
+
+**Git form** — git commands come to mind first, so the repo name moves to the end:
+
+![hop](https://img.shields.io/badge/h-op-9ca3af?labelColor=1f6feb&style=for-the-badge) ![arrow](https://img.shields.io/badge/-%E2%86%92-lightgrey?style=for-the-badge) ![git](https://img.shields.io/badge/git--command-d97706?style=for-the-badge) ![arrow](https://img.shields.io/badge/-%E2%86%92-lightgrey?style=for-the-badge) ![repo](https://img.shields.io/badge/re-po--name-9ca3af?labelColor=7c3aed&style=for-the-badge)
+
+```sh
+hop  pull   out<TAB>                # → hop pull outbox
+hop  push   --all
+hop  sync   work                    # 'work' is a group
+hop  clone  out<TAB>
+```
+
+Same hop, same repo — just an ergonomic reorder for the case where the git verb is the first thing you think of. The full grammar (subcommands, verbs, flags) is in [Grammar at a glance](#grammar-at-a-glance) below.
+
 ## Install
 
 ### Homebrew (macOS and Linux)
