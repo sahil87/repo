@@ -45,7 +45,7 @@ Same hop, same repo — just an ergonomic reorder for the case where the git ver
 
 **Worktree form** — the repo slot accepts an optional `/<wt-name>` suffix. Everything else is unchanged; every verb (cd, where, open, tool-form, -R) inherits it:
 
-![hop](https://img.shields.io/badge/h-op-9ca3af?labelColor=1f6feb&style=for-the-badge) ![arrow](https://img.shields.io/badge/-%E2%86%92-lightgrey?style=for-the-badge) ![repo](https://img.shields.io/badge/re-po--name-9ca3af?labelColor=7c3aed&style=for-the-badge) ![sep](https://img.shields.io/badge/-%2F-lightgrey?style=for-the-badge) ![wt](https://img.shields.io/badge/fe-at--x-9ca3af?labelColor=0d9488&style=for-the-badge) ![arrow](https://img.shields.io/badge/-%E2%86%92-lightgrey?style=for-the-badge) ![cmd](https://img.shields.io/badge/command-059669?style=for-the-badge)
+![hop](https://img.shields.io/badge/h-op-9ca3af?labelColor=1f6feb&style=for-the-badge) ![arrow](https://img.shields.io/badge/-%E2%86%92-lightgrey?style=for-the-badge) ![repo](https://img.shields.io/badge/re-po--name-9ca3af?labelColor=7c3aed&style=for-the-badge) ![sep](https://img.shields.io/badge/-%2F-lightgrey?style=for-the-badge) ![wt](https://img.shields.io/badge/wo-rktree-9ca3af?labelColor=0d9488&style=for-the-badge) ![arrow](https://img.shields.io/badge/-%E2%86%92-lightgrey?style=for-the-badge) ![cmd](https://img.shields.io/badge/command-059669?style=for-the-badge)
 
 ```sh
 h  out<TAB>/fe<TAB>     git status              # → hop outbox/feat-x git status
