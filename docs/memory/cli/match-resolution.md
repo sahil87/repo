@@ -6,13 +6,38 @@ Algorithm shared by every form that takes a `<name>` argument (`hop` bare picker
 
 ## Algorithm
 
-1. `loadRepos()` reads `hop.yaml` (via `config.Resolve` → `config.Load` → `repos.FromConfig`) and returns the full `Repos` list, in YAML source order (groups in `cfg.Groups` order, URLs within each group in source order — yaml.v3 `yaml.Node` round-trip preserves this).
-2. If `query == ""` → skip step 3 and go straight to fzf with the full list (no `--query` flag). This handles bare `hop`, `hop clone` (no name), etc.
-3. If `query != ""` → filter via `Repos.MatchOne(query)`: case-insensitive substring on `Name` only (not Path, not URL).
+1. **Pre-step — worktree-suffix split (change `7eab`)**: if `query` contains a `/`, split on the **first** `/`. Repo names from `hop.yaml` are URL basenames (single component, no `/`), so the first `/` unambiguously separates the LHS (repo) from the RHS (worktree name) even when wt worktree names themselves contain `/` (wt permits `/` in names). Empty LHS (`/<wt>`) → return `*errExitCode{code: 2, msg: "hop: empty repo name before '/'"}`; empty RHS (`<repo>/`) → return `*errExitCode{code: 2, msg: "hop: empty worktree name after '/'"}` — silent fallback to bare-repo resolution would hide typos and tab-completion artifacts. Otherwise, recurse on the LHS (step 2 onward) to resolve a `*repos.Repo`, then run the worktree-resolution sub-step (below). When no `/` is present, fall through to step 2 with the original query — behavior is unchanged from pre-`7eab`.
+2. `loadRepos()` reads `hop.yaml` (via `config.Resolve` → `config.Load` → `repos.FromConfig`) and returns the full `Repos` list, in YAML source order (groups in `cfg.Groups` order, URLs within each group in source order — yaml.v3 `yaml.Node` round-trip preserves this).
+3. If `query == ""` → skip step 4 and go straight to fzf with the full list (no `--query` flag). This handles bare `hop`, `hop clone` (no name), etc.
+4. If `query != ""` → filter via `Repos.MatchOne(query)`: case-insensitive substring on `Name` only (not Path, not URL).
    - Exactly **1 match** → return it directly. Fzf is **not** invoked. (This is the path that works without fzf installed.)
    - 0 or 2+ matches → fall through to fzf.
-4. Fzf invocation: `internal/fzf.Pick(ctx, lines, query)` pipes the **full repo list** (not the filtered subset) to fzf via stdin. Each line is `display\tpath\turl`. Fzf displays only the first column (`--with-nth 1 --delimiter '\t'`). The display column is built by `buildPickerLines` (see below).
-5. The returned line's path column (the second tab-separated field) is matched back to the source `Repos` to recover the full `*Repo`.
+5. Fzf invocation: `internal/fzf.Pick(ctx, lines, query)` pipes the **full repo list** (not the filtered subset) to fzf via stdin. Each line is `display\tpath\turl`. Fzf displays only the first column (`--with-nth 1 --delimiter '\t'`). The display column is built by `buildPickerLines` (see below).
+6. The returned line's path column (the second tab-separated field) is matched back to the source `Repos` to recover the full `*Repo`.
+
+### Worktree-resolution sub-step (change `7eab`)
+
+Triggered by step 1 when the query contains `/`. Lives in `resolve.go::resolveWorktreePath`, called from `resolveByName` after the LHS resolves.
+
+1. **Cloned-state guard**: `cloneState(repo.Path)` MUST return `stateAlreadyCloned`. Uncloned repos return `*errExitCode{code: 1, msg: "hop: '<name>' is not cloned. Try: hop clone <name>"}` — `wt list --json` is NEVER invoked against a missing main checkout. This guard applies ONLY to `/`-suffixed queries; bare queries (`hop <name> where` with no `/`) keep their existing permissive behavior of resolving registry paths even for repos that haven't been cloned yet.
+2. **Invoke `wt list --json`** via the package-level `listWorktrees(ctx, repo.Path)` seam in `wt_list.go`. The default seam routes through `internal/proc.RunCapture` with `cmd.Dir = repo.Path` and a 5-second `context.WithTimeout` (matching `internal/scan`'s `git remote` precedent — wt list is a local op with no network round-trip). Unmarshal into `[]WtEntry` (the JSON contract — see [architecture/wrapper-boundaries](../architecture/wrapper-boundaries.md)).
+3. **Match RHS** against each entry's `Name` field: exact equality, case-sensitive. Mirrors the case-sensitive group-name match in `resolveTargets` (wt names are user-curated and intentional; case-insensitive substring would re-introduce ambiguity wt itself avoids). The `hop <name>/main` case naturally resolves to the main checkout's path because wt's JSON entry with `is_main: true` carries that path — no special-case branching in hop.
+4. **Return a shallow-copied `*repos.Repo`** whose `Path` is the matched entry's `Path`; `Name`, `Group`, `URL`, `Dir` are preserved from the LHS-resolved repo (they describe the registry identity, not the on-disk worktree). Every verb downstream (`where`, `cd` via shim, `open`, `-R`, tool-form, `pull`, `push`, `sync`) inherits the worktree path automatically because they all consume `repo.Path`.
+
+### Worktree error paths
+
+Each surfaces as `*errExitCode{code: <n>, msg: <pre-formatted stderr line>}` so `translateExit` prints the message verbatim. Listed here for reference; the wordings live as constants in `resolve.go` (`wtMissingHint`) or as inline `fmt.Sprintf` calls.
+
+| Trigger | Exit code | Stderr line |
+|---|---|---|
+| Empty LHS (`hop /feat-x where`) | 2 | `hop: empty repo name before '/'` |
+| Empty RHS (`hop outbox/ where`) | 2 | `hop: empty worktree name after '/'` |
+| `/`-suffixed query, repo not cloned | 1 | `hop: '<name>' is not cloned. Try: hop clone <name>` |
+| `wt` missing on PATH | 1 | `hop: wt: not found on PATH.` (the `wtMissingHint` constant, shared with `open.go` and `ls.go --trees`) |
+| `wt list --json` non-zero exit or malformed JSON | 1 | `hop: wt list: <err>` (no silent fallback to the main path — unparseable wt output is a real failure) |
+| No matching worktree name | 1 | `hop: worktree '<wt>' not found in '<name>'. Try: wt list (in <path>) or hop ls --trees` |
+
+`wt list --json` failures (the last two rows) are deliberately loud — silent fallback to the main checkout's path would mask wt schema regressions, fixture corruption, and typos that exact-match avoids. Unknown JSON fields ARE silently ignored (Go's `encoding/json` default — no `DisallowUnknownFields`) so future wt schema additions don't break hop; only structurally invalid JSON or wrong top-level shape surfaces as `hop: wt list: <err>`.
 
 ## Group disambiguation in the picker
 

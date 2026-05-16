@@ -8,18 +8,18 @@
 | Subcommand | Args | Behavior summary | Exit codes |
 |---|---|---|---|
 | `hop` | (none) | fzf picker over all repos; print selected absolute path on stdout | 0 selected, 130 cancelled |
-| `hop <name>` | `<name>` | Binary form: print bare-name hint to stderr, exit 2 (1-arg dispatch is shell-only — shorthand for `hop <name> cd`). Shell-function form (after `eval`): cd into the resolved path. | Binary: 2. Shell function: 0 success, 1 no match |
+| `hop <name>` | `<name>` | Binary form: print bare-name hint to stderr, exit 2 (1-arg dispatch is shell-only — shorthand for `hop <name> cd`). Shell-function form (after `eval`): cd into the resolved path. `<name>` accepts an optional `/<wt-name>` suffix (`hop <name>/<wt>`) that resolves through `wt list --json` to a worktree path — see "Match Resolution Algorithm" below. | Binary: 2. Shell function: 0 success, 1 no match, 2 empty LHS/RHS in `/`-suffixed query |
 | `hop <name> cd` | `<name> cd` | Binary form: print `cd` hint to stderr, exit 2 (cd is shell-only). Shell-function form: cd into the resolved path. | Binary: 2. Shell function: 0 success, 1 no match |
-| `hop <name> where` | `<name> where` | Resolve `<name>` and print absolute path on stdout. Replaces v0.x's top-level `hop where <name>` subcommand (removed). | 0 selected, 1 no match, 130 cancelled |
-| `hop <name> open` | `<name> open` | Resolve `<name>`, then exec `wt open <path>` (positional path arg, no chdir, stdio fully inherited). wt presents its interactive app menu directly to the user's terminal. The cd-handoff for "Open here" lives in the shim, not the binary: the shim creates a temp file, exports `WT_CD_FILE` and `WT_WRAPPER=1` on the binary invocation, and reads the file after wt exits. The binary is a transparent passthrough — emits no stdout. wt is a Homebrew formula dependency (`depends_on "sahil87/tap/wt"`). | wt's exit code on completion; 1 if wt is missing or resolution fails; 130 fzf cancelled |
-| `hop <name> -R <cmd>...` | positional + flag + child argv | Resolve `<name>`, then exec `<cmd>...` with `cwd = <resolved-path>` and inherited stdio. Implemented in the shim, which rewrites to the binary's internal `command hop -R <name> <cmd>...` shape. | child's exit code; 1 if resolution fails; 2 on usage error |
-| `hop <name> <tool> [args...]` | (shim only) | Sugar for `hop <name> -R <tool> [args...]`. Implemented in `hop shell-init` output; the binary itself errors with the tool-form hint (`'<tool>' is not a hop verb (cd, where, open)...`). | tool's exit code; 1 if `<tool>` is missing on PATH (via the binary's `-R` error path) or `<name>` fails to resolve |
+| `hop <name> where` | `<name> where` | Resolve `<name>` and print absolute path on stdout. Replaces v0.x's top-level `hop where <name>` subcommand (removed). `<name>` accepts the `/<wt-name>` suffix — `hop <name>/<wt> where` prints the worktree's absolute path. | 0 selected, 1 no match / worktree not found / wt missing / wt list failure, 2 empty LHS/RHS, 130 cancelled |
+| `hop <name> open` | `<name> open` | Resolve `<name>`, then exec `wt open <path>` (positional path arg, no chdir, stdio fully inherited). wt presents its interactive app menu directly to the user's terminal. The cd-handoff for "Open here" lives in the shim, not the binary: the shim creates a temp file, exports `WT_CD_FILE` and `WT_WRAPPER=1` on the binary invocation, and reads the file after wt exits. The binary is a transparent passthrough — emits no stdout. wt is a Homebrew formula dependency (`depends_on "sahil87/tap/wt"`). `<name>` accepts the `/<wt-name>` suffix — wt opens its app menu targeting the worktree's path. | wt's exit code on completion; 1 if wt is missing or resolution fails; 130 fzf cancelled |
+| `hop <name> -R <cmd>...` | positional + flag + child argv | Resolve `<name>`, then exec `<cmd>...` with `cwd = <resolved-path>` and inherited stdio. Implemented in the shim, which rewrites to the binary's internal `command hop -R <name> <cmd>...` shape. `<name>` accepts the `/<wt-name>` suffix — the child runs with `cwd = <worktree-path>`. | child's exit code; 1 if resolution fails; 2 on usage error |
+| `hop <name> <tool> [args...]` | (shim only) | Sugar for `hop <name> -R <tool> [args...]`. Implemented in `hop shell-init` output; the binary itself errors with the tool-form hint (`'<tool>' is not a hop verb (cd, where, open)...`). `<name>` accepts the `/<wt-name>` suffix — the tool runs with `cwd = <worktree-path>` (e.g., `hop outbox/feat-x cursor .`). | tool's exit code; 1 if `<tool>` is missing on PATH (via the binary's `-R` error path) or `<name>` fails to resolve |
 | `hop clone [<name>] \| --all` | optional `<name>` or `--all` | Clone single (resolved) or all missing repos | 0 success, 1 path conflict, non-zero on git failure |
 | `hop clone <url>` | 1 (URL form, detected by `looksLikeURL`) | Ad-hoc clone with auto-registration. Flags: `--group`, `--no-add`, `--no-cd`, `--name`. | 0 success, 1 missing group / path conflict / git failure |
 | `hop pull [<name-or-group>] \| --all` | optional `<name-or-group>` or `--all` | Wraps `git pull` over a single repo (substring `Name` match), every cloned repo in a named group (exact group match), or every cloned repo with `--all`. Per-call 10-minute `cloneTimeout` via `proc.RunCapture`. stdout empty; per-repo `pull: <name> ✓ <last-line>` / `pull: <name> ✗ <err>` and `skip: <name> not cloned` go to stderr; batch summary `summary: pulled=N skipped=M failed=K`. `git` missing emits `gitMissingHint` once and aborts the batch. | 0 success / batch with `failed == 0`; 1 single-repo not-cloned, single failure, batch failed > 0, git missing, fzf missing; 2 usage error; 130 fzf cancelled |
 | `hop push [<name-or-group>] \| --all` | optional `<name-or-group>` or `--all` | Wraps `git push` over a single repo (substring `Name` match), every cloned repo in a named group (exact group match), or every cloned repo with `--all`. Same signature, flag set, and resolution rules as `hop pull` — delegates to the shared `resolveTargets` resolver and `runBatch` helper. Per-call 10-minute `cloneTimeout` via `proc.RunCapture`. stdout empty; per-repo `push: <name> ✓ <last-line>` / `push: <name> ✗ <err>` and `skip: <name> not cloned` go to stderr; batch summary `summary: pushed=N skipped=M failed=K`. `git` missing emits `gitMissingHint` once and aborts the batch. No `--force`, no `--set-upstream` — Constitution III; reach for `hop -R <name> git push --force` for nuanced single-repo cases. | 0 success / batch with `failed == 0`; 1 single-repo not-cloned, single failure, batch failed > 0, git missing, fzf missing; 2 usage error; 130 fzf cancelled |
 | `hop sync [<name-or-group>] \| --all` | optional `<name-or-group>` or `--all` | Wraps `git pull --rebase` then `git push` per target. Same signature and resolution rules as `hop pull`. Two independent 10-minute timeouts per repo. Rebase `CONFLICT` emits a `resolve manually with: git -C <path> rebase --continue` hint and skips push; push failure emits `sync: <name> ✗ push failed: <err>`. Batch summary `summary: synced=N skipped=M failed=K`. | Exit codes match `pull`/`push`. |
-| `hop ls` | (none) | Print all repos as `name<spaces>path` columns | 0 |
+| `hop ls` | (none); `--trees` boolean flag | Default: print all repos as `name<spaces>path` columns. With `--trees`: fan `wt list --json` across configured cloned repos in YAML source order and emit per-row worktree summaries (`name<spaces>{N} tree(s)  (<wt-list>)` where each wt is `name[*][↑N]`). Non-cloned repos surface `(not cloned)` without invoking wt. Per-row `wt list` failures degrade as inline `(wt list failed: <err>)`; first `wt`-missing aborts the run with `hop: wt: not found on PATH.` | 0 success; 1 wt missing during `--trees` |
 | `hop shell-init <shell>` | `zsh` or `bash` (required) | Emit shell function wrapper + cobra-generated completion to stdout | 0 success, 2 unsupported shell |
 | `hop config init` | (none) | Bootstrap a starter `hop.yaml` at the resolved location | 0 written, 1 file exists, 2 write error |
 | `hop config where` | (none) | Print the resolved config path on stdout. Renamed from v0.0.1's `config path`. | 0 resolved, 1 unresolvable |
@@ -35,6 +35,7 @@
 
 Used by `hop`, `hop <name> where`, `hop <name> cd` (via the shim's `_hop_dispatch cd` → `command hop "$2" where`), `hop -R`, `hop clone`.
 
+0. **Worktree-suffix pre-step**: if `<name>` contains a `/`, split on the **first** `/` (repo names from `hop.yaml` are URL basenames and never contain `/`, so first-split is unambiguous even when wt worktree names themselves contain `/`). Empty LHS → exit 2 with `hop: empty repo name before '/'`; empty RHS → exit 2 with `hop: empty worktree name after '/'`. Otherwise, recurse on the LHS (steps 1-5 below) to resolve a repo, then run the worktree-resolution sub-step (described below).
 1. Build the list of all known repos from `hop.yaml`. Each entry has `(Name, Group, Dir, URL, Path)`. The list preserves YAML source order (groups in `cfg.Groups` order, URLs within each group in source order).
 2. If `<name>` is non-empty: filter by case-insensitive substring match on `Name` (not Path, not URL, not Group).
 3. If exactly **1 match**: return it directly without invoking fzf.
@@ -44,6 +45,21 @@ Used by `hop`, `hop <name> where`, `hop <name> cd` (via the shim's `_hop_dispatc
    ```
    The `--select-1` flag makes fzf auto-select if its filter narrows to exactly 1.
 5. If `<name>` is empty: invoke fzf without `--query` (full picker).
+
+#### Worktree-resolution sub-step
+
+When the pre-step splits on `/`, after the LHS resolves to a `*repos.Repo`:
+
+1. **Cloned-state guard**: if the resolved repo's `.git` does NOT exist on disk, exit 1 with `hop: '<name>' is not cloned. Try: hop clone <name>` BEFORE invoking wt. This guard applies ONLY to `/`-suffixed queries; bare queries retain their existing permissive behavior of resolving registry paths even when the repo isn't cloned.
+2. Invoke `wt list --json` in the repo's main checkout via `internal/proc.RunCapture` with a 5-second per-call timeout. Parse into `[]WtEntry` where each entry has `{Name, Branch, Path, IsMain, IsCurrent, Dirty, Unpushed}` (unknown JSON fields are silently ignored for forward-compat).
+3. Find the entry whose `Name` equals the RHS exactly (case-sensitive — mirrors the case-sensitive group-name match in `resolveTargets`). `hop <name>/main` naturally resolves to the main checkout because wt's `is_main: true` entry carries that path; no special-case in hop.
+4. Return a shallow copy of the LHS-resolved repo with `Path` replaced by the worktree's absolute path; all other fields (`Name`, `Group`, `URL`, `Dir`) preserved.
+
+Error surfaces (all exit code 1 unless noted; pre-formatted stderr lines):
+
+- `wt` missing on PATH → `hop: wt: not found on PATH.` (same wording as `hop <name> open`)
+- `wt list --json` non-zero exit or malformed JSON → `hop: wt list: <err>` (no silent fallback to the main path — unparseable wt output is a real failure)
+- No matching worktree → `hop: worktree '<wt>' not found in '<repo>'. Try: wt list (in <repo-path>) or hop ls --trees`
 
 #### Group disambiguation in the picker
 
@@ -403,6 +419,7 @@ External tools (`fzf`, `git`, `<cmd>` for `-R`) are checked **lazily** — only 
 | `fzf` | `hop` (bare picker), `hop <name> where` (ambiguous), `hop -R` (ambiguous), `hop clone <name>` (ambiguous) | Print to stderr: `hop: fzf is not installed. Install it: brew install fzf (macOS) or apt install fzf (Debian).` Exit 1. |
 | `git` | `hop clone` (any form); `hop config scan <dir>` (only when the walk finds a `.git` candidate — empty trees succeed without `git`) | Print to stderr: `hop: git is not installed.` Exit 1. |
 | `<cmd>` | `hop <name> -R <cmd>...` (and the shim's `hop <name> <tool>` sugar that rewrites to it) | Print to stderr: `hop: -R: '<cmd>' not found.` Exit 1. |
+| `wt` | `hop <name> open` (any form); `hop <name>/<wt> ...` (any `/`-suffixed form, via `resolveByName`); `hop ls --trees` (lazy — first invocation only) | Print to stderr: `hop: wt: not found on PATH.` Exit 1. Mitigated: wt is declared as a Homebrew formula dependency (`depends_on "sahil87/tap/wt"`). |
 | `brew` | `hop update` (when installed via brew) | Print to stderr: `hop update: brew not found on PATH.` Exit 1. |
 
 Subcommands that don't need a tool MUST work without it. Examples:

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"strings"
+
 	"github.com/spf13/cobra"
 )
 
@@ -13,6 +16,15 @@ import (
 // shell scripts do prefix-matching against toComplete on the candidate set —
 // we just hand back every name.
 //
+// Worktree-prefix branch: when toComplete contains "/" the token is split on
+// the first "/", the LHS resolves to a unique configured repo, and
+// `wt list --json` provides candidates as `<repo>/<wt>` strings (the full
+// token the user is composing — cobra prefix-matches against toComplete in
+// the generated shell scripts, so bare wt names would mis-replace the LHS).
+// Any failure in the worktree path (LHS unknown or ambiguous, repo uncloned,
+// wt missing, JSON error) returns nil candidates silently — completion is a
+// UX surface; stderr noise during TAB is a bug.
+//
 // Names that collide with one of cmd's own subcommands are filtered out:
 // cobra dispatches the first token to the subcommand before the bare-form
 // resolver ever sees it, so advertising a repo named `clone` (for example)
@@ -22,7 +34,7 @@ import (
 // On hop.yaml load failure we return ShellCompDirectiveNoFileComp with no
 // candidates rather than ShellCompDirectiveError, so a missing config doesn't
 // surface a noisy error during tab completion.
-func completeRepoNames(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+func completeRepoNames(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// The verb-position behavior (cd/where/open at $2) only applies to the
 	// root command — other commands that delegate here (e.g. `clone` via
 	// completeCloneArg) accept at most one positional and must not surface
@@ -36,6 +48,9 @@ func completeRepoNames(cmd *cobra.Command, args []string, _ string) ([]string, c
 	}
 	if len(args) > 1 {
 		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	if strings.Contains(toComplete, "/") {
+		return completeWorktreeCandidates(toComplete)
 	}
 	rs, err := loadRepos()
 	if err != nil {
@@ -55,6 +70,45 @@ func completeRepoNames(cmd *cobra.Command, args []string, _ string) ([]string, c
 		names = append(names, r.Name)
 	}
 	return names, cobra.ShellCompDirectiveNoFileComp
+}
+
+// completeWorktreeCandidates handles the `<repo>/<partial>` branch of
+// completeRepoNames. Split toComplete on the first "/"; if the LHS resolves
+// to exactly one configured repo (case-insensitive substring, matching
+// MatchOne's tolerance) AND that repo is cloned, invoke `wt list --json` and
+// return each worktree name prefixed with the LHS verbatim so cobra's
+// prefix-match-on-toComplete works.
+//
+// Any failure mode (no LHS match, ambiguous LHS, repo uncloned, wt missing,
+// JSON error) returns nil candidates silently — never writes to stderr.
+func completeWorktreeCandidates(toComplete string) ([]string, cobra.ShellCompDirective) {
+	idx := strings.Index(toComplete, "/")
+	lhs := toComplete[:idx]
+	if lhs == "" {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	rs, err := loadRepos()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	matches := rs.MatchOne(lhs)
+	if len(matches) != 1 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	repo := matches[0]
+	state, err := cloneState(repo.Path)
+	if err != nil || state != stateAlreadyCloned {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	entries, err := listWorktrees(context.Background(), repo.Path)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, lhs+"/"+e.Name)
+	}
+	return out, cobra.ShellCompDirectiveNoFileComp
 }
 
 // completeCloneArg is the ValidArgsFunction for `hop clone`. The clone

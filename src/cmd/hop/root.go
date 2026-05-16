@@ -18,10 +18,11 @@ Getting started:
 Usage:
   hop                       fzf picker, print selection
   hop <name>                cd into the repo (shell function — needs ` + "`eval \"$(hop shell-init zsh)\"`" + `)
+  hop <name>/<wt>           same, but rooted at <wt> (a worktree of <name> per ` + "`wt list --json`" + `)
   hop <name> cd             same — explicit verb form
-  hop <name> where          echo abs path of matching repo
+  hop <name> where          echo abs path of matching repo (or worktree, with /<wt> suffix)
   hop <name> open           open the repo in an app (delegates to wt's menu; "Open here" cds the parent shell)
-  hop <name> -R <cmd>...    shim-only — run <cmd>... with cwd = <name>'s repo dir
+  hop <name> -R <cmd>...    shim-only — run <cmd>... with cwd = <name>'s repo dir (or worktree)
   hop -R <name> <cmd>...    binary-direct exec form (also reached via the shim)
   hop <name> <tool>...      shim-only sugar for ` + "`hop -R <name> <tool> ...`" + ` (e.g., ` + "`hop dotfiles cursor`" + `)
   hop clone <name>          git clone the repo if it isn't already on disk
@@ -38,6 +39,7 @@ Usage:
   hop sync <group>          Run sync in every cloned repo of <group>
   hop sync --all            Run sync in every cloned repo
   hop ls                    list all repos
+  hop ls --trees            list all repos with worktree summaries (fans out ` + "`wt list --json`" + `)
   hop shell-init <shell>    emit shell integration (zsh or bash). Use: eval "$(hop shell-init zsh)"
   hop config init           bootstrap a starter hop.yaml
   hop config where          print the resolved hop.yaml path
