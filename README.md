@@ -48,6 +48,7 @@ Same hop, same repo — just an ergonomic reorder for the case where the git ver
 ![hop](https://img.shields.io/badge/h-op-9ca3af?labelColor=1f6feb&style=for-the-badge) ![arrow](https://img.shields.io/badge/-%E2%86%92-lightgrey?style=for-the-badge) ![repo](https://img.shields.io/badge/re-po--name-9ca3af?labelColor=7c3aed&style=for-the-badge) ![sep](https://img.shields.io/badge/-%2F-lightgrey?style=for-the-badge) ![wt](https://img.shields.io/badge/wo-rktree-9ca3af?labelColor=0d9488&style=for-the-badge) ![arrow](https://img.shields.io/badge/-%E2%86%92-lightgrey?style=for-the-badge) ![cmd](https://img.shields.io/badge/command-059669?style=for-the-badge)
 
 ```sh
+h  out<TAB>             # multi-worktree repo → TAB surfaces outbox, outbox/feat-x, outbox/hotfix
 h  out<TAB>/fe<TAB>     git status              # → hop outbox/feat-x git status
 h  out<TAB>/<TAB>       cursor .                # → TAB after / lists worktrees of outbox
 hop  out<TAB>/main      where                   # → main-worktree path (same as bare `hop outbox where`)
@@ -205,7 +206,7 @@ The shim's rule is simpler than the spec makes it sound: **the first positional 
 | `hop <name>/<wt>` | Same as `hop <name>` but lands in the named worktree (resolved via `wt list --json`). All verbs above accept the suffix — `<name>/<wt> where`, `<name>/<wt> open`, `<name>/<wt> <tool> ...`, etc. |
 | `hop ls --trees` | Per-repo worktree summary across the registry (`*` = dirty, `↑N` = unpushed commits). |
 
-Tab completion knows which slot you're in: `hop <TAB>` offers subcommands + repo names; `hop outbox <TAB>` offers verbs + tools; `hop outbox/<TAB>` offers worktree names for that repo.
+Tab completion knows which slot you're in: `hop <TAB>` offers subcommands + repo names; `hop outbox <TAB>` offers verbs + tools; `hop outbox/<TAB>` offers worktree names for that repo. When `hop <prefix><TAB>` uniquely resolves to a cloned repo with 2+ worktrees, completion surfaces both the bare repo and `<repo>/<wt>` candidates inline — press Space to commit the main checkout, or pick a worktree from the menu.
 
 ## Config schema
 

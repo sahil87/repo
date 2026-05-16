@@ -1,0 +1,26 @@
+{"action":"enter","driver":"fab-new","event":"stage-transition","stage":"intake","ts":"2026-05-16T14:13:02Z"}
+{"args":"Eager worktree-aware tab completion for the repo positional - when h \u003cprefix\u003e\u003cTAB\u003e uniquely resolves to a cloned repo with 2+ worktrees, return both bare repo name and \u003crepo\u003e/\u003cwt-name\u003e candidates with ShellCompDirectiveNoSpace","cmd":"fab-new","event":"command","ts":"2026-05-16T14:13:02Z"}
+{"delta":"+1.9","event":"confidence","score":1.9,"trigger":"calc-score","ts":"2026-05-16T14:14:40Z"}
+{"delta":"+0.0","event":"confidence","score":1.9,"trigger":"calc-score","ts":"2026-05-16T14:14:56Z"}
+{"cmd":"fab-clarify","event":"command","ts":"2026-05-16T14:16:35Z"}
+{"delta":"+3.1","event":"confidence","score":5,"trigger":"calc-score","ts":"2026-05-16T14:19:18Z"}
+{"delta":"+0.0","event":"confidence","score":5,"trigger":"calc-score","ts":"2026-05-16T14:19:26Z"}
+{"delta":"+0.0","event":"confidence","score":5,"trigger":"calc-score","ts":"2026-05-16T14:19:31Z"}
+{"cmd":"fab-fff","event":"command","ts":"2026-05-16T14:20:23Z"}
+{"cmd":"fab-fff","event":"command","ts":"2026-05-16T14:21:15Z"}
+{"delta":"+0.0","event":"confidence","score":5,"trigger":"calc-score","ts":"2026-05-16T14:23:17Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"spec","ts":"2026-05-16T14:23:20Z"}
+{"delta":"+0.0","event":"confidence","score":5,"trigger":"calc-score","ts":"2026-05-16T14:23:23Z"}
+{"cmd":"fab-continue","event":"command","ts":"2026-05-16T14:25:56Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"apply","ts":"2026-05-16T14:25:56Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"review","ts":"2026-05-16T14:28:24Z"}
+{"cmd":"fab-continue","event":"command","ts":"2026-05-16T14:29:09Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"hydrate","ts":"2026-05-16T14:30:49Z"}
+{"event":"review","result":"passed","ts":"2026-05-16T14:30:49Z"}
+{"cmd":"fab-continue","event":"command","ts":"2026-05-16T14:32:35Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"ship","ts":"2026-05-16T14:34:27Z"}
+{"cmd":"git-pr","event":"command","ts":"2026-05-16T14:35:25Z"}
+{"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"review-pr","ts":"2026-05-16T14:36:48Z"}
+{"cmd":"git-pr-review","event":"command","ts":"2026-05-16T14:37:46Z"}
+{"delta":"+0.0","event":"confidence","score":5,"trigger":"calc-score","ts":"2026-05-16T14:48:49Z"}
+{"event":"review","result":"passed","ts":"2026-05-16T14:50:08Z"}

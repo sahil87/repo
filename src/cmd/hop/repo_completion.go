@@ -14,7 +14,9 @@ import (
 // root command surfaces the recognized verbs (cd, where, open); other commands
 // using this helper (e.g. `clone`) suppress completion past $1. The generated
 // shell scripts do prefix-matching against toComplete on the candidate set —
-// we just hand back every name.
+// for the default (non-root or no-unique-match) path we just hand back every
+// name; for the root-command eager-fire path we hand back the unique repo plus
+// its `<repo>/<wt>` candidates (see "Eager pre-slash branch" below).
 //
 // Worktree-prefix branch: when toComplete contains "/" the token is split on
 // the first "/", the LHS resolves to a unique configured repo, and
@@ -24,6 +26,19 @@ import (
 // Any failure in the worktree path (LHS unknown or ambiguous, repo uncloned,
 // wt missing, JSON error) returns nil candidates silently — completion is a
 // UX surface; stderr noise during TAB is a bug.
+//
+// Eager pre-slash branch: applies ONLY to the root command (the $1 slot of
+// the repo-verb grammar). Non-root subcommands that delegate here (e.g.
+// `clone` via completeCloneArg) accept a bare repo name or URL — surfacing
+// `<repo>/<wt>` candidates there would be misleading, so the eager expansion
+// is gated to `isRoot`. When on the root AND toComplete does NOT contain "/"
+// AND rs.MatchOne(toComplete) returns exactly one non-collided repo that is
+// cloned with >=2 worktrees, the candidate list is expanded to
+// [<repo>, <repo>/<wt1>, ...] with directive
+// ShellCompDirectiveNoFileComp|ShellCompDirectiveNoSpace so the user sees
+// the worktree menu without typing "/". The unique-match guard is the cost
+// gate — ambiguous prefixes never run `wt list --json` across N repos. Every
+// failure mode silently falls back to today's candidate list and directive.
 //
 // Names that collide with one of cmd's own subcommands are filtered out:
 // cobra dispatches the first token to the subcommand before the bare-form
@@ -68,6 +83,31 @@ func completeRepoNames(cmd *cobra.Command, args []string, toComplete string) ([]
 			continue
 		}
 		names = append(names, r.Name)
+	}
+	// Eager pre-slash branch: root command only. When toComplete uniquely
+	// identifies one non-collided repo that is cloned and has >=2 worktrees,
+	// expand the candidate list to include `<repo>/<wt>` forms so the user
+	// sees the worktree menu without typing `/`. NoSpace keeps the menu
+	// interactive after a bare-repo pick. Non-root subcommands (e.g. `clone`)
+	// accept only a repo name or URL — surfacing worktree-suffixed candidates
+	// there would be misleading. Every failure mode silently falls back to
+	// the default candidate list.
+	if isRoot {
+		if matches := rs.MatchOne(toComplete); len(matches) == 1 {
+			repo := matches[0]
+			if _, collides := subNames[repo.Name]; !collides {
+				if state, err := cloneState(repo.Path); err == nil && state == stateAlreadyCloned {
+					if entries, err := listWorktrees(context.Background(), repo.Path); err == nil && len(entries) >= 2 {
+						out := make([]string, 0, 1+len(entries))
+						out = append(out, repo.Name)
+						for _, e := range entries {
+							out = append(out, repo.Name+"/"+e.Name)
+						}
+						return out, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
+					}
+				}
+			}
+		}
 	}
 	return names, cobra.ShellCompDirectiveNoFileComp
 }

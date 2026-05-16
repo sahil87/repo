@@ -84,7 +84,7 @@ The `-R` flag bypasses cobra entirely (pre-Execute argv inspection) and uses `os
 - `resolveOne(cmd, query) (*repos.Repo, error)` — cobra-friendly wrapper that writes `fzfMissingHint` to `cmd.ErrOrStderr()` and returns `errSilent` on missing fzf.
 - `resolveAndPrint(cmd, query) error` — wraps `resolveOne` and writes `repo.Path` to stdout.
 - `buildPickerLines(rs) []string` — builds the tab-separated lines piped to fzf. When two repos share a `Name`, the displayed first column gets a `[<group>]` suffix. The path column (used for match-back) is unique per repo.
-- `listWorktrees(ctx, repoPath) ([]WtEntry, error)` — package-level `var` seam in `wt_list.go` initialised to `defaultListWorktrees`. The default builds a 5-second `context.WithTimeout` and routes through `proc.RunCapture(ctx, repoPath, "wt", "list", "--json")`, then unmarshals into `[]WtEntry`. The seam pattern mirrors `internal/fzf/fzf.go::runInteractive` — tests inject fakes without spawning a real `wt`. Returns `proc.ErrNotFound` when `wt` is missing on PATH (callers match via `errors.Is` to produce the install hint). Used by `resolveWorktreePath` (single-worktree lookup) and `ls.go::runLsTrees` (fan-out for `--trees`) — two call sites, below the threshold for a dedicated `internal/wt/` package.
+- `listWorktrees(ctx, repoPath) ([]WtEntry, error)` — package-level `var` seam in `wt_list.go` initialised to `defaultListWorktrees`. The default builds a 5-second `context.WithTimeout` and routes through `proc.RunCapture(ctx, repoPath, "wt", "list", "--json")`, then unmarshals into `[]WtEntry`. The seam pattern mirrors `internal/fzf/fzf.go::runInteractive` — tests inject fakes without spawning a real `wt`. Three distinct features and four call sites: `resolveWorktreePath` (single-worktree lookup for `<repo>/<wt>` path resolution — change `7eab`), `ls.go::runLsTrees` (fan-out for `hop ls --trees` — change `7eab`), and tab completion in `repo_completion.go` (both the post-slash `completeWorktreeCandidates` from change `7eab` and the root-only pre-slash eager branch in `completeRepoNames` from change `odle` — the eager branch is gated to `cmd.Parent() == nil` so non-root subcommands like `hop clone <prefix>` retain their bare-repo-name behavior). Returns `proc.ErrNotFound` when `wt` is missing on PATH (callers match via `errors.Is` to produce the install hint). Still below the threshold for a dedicated `internal/wt/` package — all four needs are the same single-shot `wt list --json` with a 5-second timeout; see [architecture/wrapper-boundaries](../architecture/wrapper-boundaries.md) for the promote-later rationale.
 
 ## External tool failure messages
 
@@ -156,6 +156,26 @@ The cobra-generated completion is appended at runtime — `rootCmd.GenZshComplet
 - bash: `complete -o default -F __start_hop h hi`
 
 so the `h` and `hi` aliases share the same completion logic — without this, tab completion would only work on `hop`, not on the aliases.
+
+### Repo positional tab completion (`$1`)
+
+The `ValidArgsFunction` for the root command's `$1` slot is `src/cmd/hop/repo_completion.go::completeRepoNames`. It runs three branches in order:
+
+1. **Verb position (`len(args) == 1` on the root command)** → return `["cd", "where", "open"]` with `ShellCompDirectiveNoFileComp`. Non-root callers (e.g., `clone` via `completeCloneArg`) suppress completion past `$1`.
+2. **Post-slash worktree branch (`toComplete` contains `/`)** → delegate to `completeWorktreeCandidates`, which splits on the first `/`, resolves the LHS via `rs.MatchOne`, invokes `listWorktrees(ctx, repo.Path)`, and returns `<lhs>/<wt>` strings (the full token the user is composing — cobra prefix-matches against `toComplete`, so bare wt names would mis-replace the LHS). Unchanged since change `7eab`.
+3. **Pre-slash eager worktree branch (`toComplete` has no `/`)** — change `odle`. After collecting today's `names` slice (loaded repos minus the subcommand-collision filter), the function probes for an eager-expansion fire. All four guards must hold for the menu to surface:
+   - `rs.MatchOne(toComplete)` returns exactly one repo. Ambiguous prefixes (0 or 2+ matches) bypass the branch entirely — the unique-match guard is the cost gate that prevents `wt list --json` fan-out across N repos. Empty `toComplete` falls into this case naturally because `MatchOne("")` returns every repo.
+   - The matched repo's `Name` is NOT in `subNames` (subcommand collision). The collision filter runs BEFORE the eager check, so a repo literally named `clone` (which cobra would dispatch to the `hop clone` subcommand before the bare-form resolver ever sees it) is never offered with worktree suffixes.
+   - `cloneState(repo.Path)` returns `stateAlreadyCloned`. Uncloned repos have no `.git` to query — matches `completeWorktreeCandidates`'s precedent.
+   - `listWorktrees(context.Background(), repo.Path)` returns nil error AND `len(entries) >= 2`. The `>= 2` threshold means the menu only surfaces when worktree-vs-main is a real choice; a 1-worktree repo keeps today's auto-space-and-finalize behavior.
+
+   When all four hold, the function returns `[<repo>, <repo>/<entries[0].Name>, <repo>/<entries[1].Name>, ...]` (bare repo at position 0, then `wt list --json` source order verbatim — matches `hop ls --trees` ordering, no alphabetical reordering) with directive `cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace`. `NoSpace` is essential — without it the shell auto-finalizes `$1` after the user picks the bare form, defeating the menu. The bitwise-OR composes cleanly with the existing `NoFileComp` flag.
+
+   **Silent-fallback contract**: every failure mode (uncloned, `wt` missing, `wt list --json` non-zero exit, malformed JSON, context timeout, fewer than 2 entries) returns the original `names` list with today's `ShellCompDirectiveNoFileComp` only. The completion path never writes to stderr — enforced by the package-level comment block in `repo_completion.go` and consistent with `completeWorktreeCandidates`.
+
+   **Shell-degradation note**: bash users (and zsh users without `menu select`) see the eager candidates as a flat list rather than arrow-key navigation. Candidates are still surfaced; further disambiguation is by typing more characters. The bare-cd cost — `h <name><TAB>` against a multi-worktree repo no longer auto-spaces, so the user pays one extra Space keystroke to commit "use main" — is the accepted price of discoverability.
+
+   No caching across Tab presses: each eager-fire invocation runs `wt list --json` fresh (Constitution II — no database; measured 6.3-8.1ms median latency is below the perception threshold). The shared `listWorktrees` seam is documented in [match-resolution](match-resolution.md#worktree-resolution-sub-step-change-7eab).
 
 ## Tool-form dispatch
 
