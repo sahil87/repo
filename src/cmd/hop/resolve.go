@@ -14,6 +14,12 @@ import (
 	"github.com/sahil87/hop/internal/repos"
 )
 
+// wtMissingHint is the exact stderr line printed when `wt` is needed but not
+// on PATH. Mirrored from cmd/hop/open.go so the wording stays consistent
+// whether the missing-wt error surfaces during `hop <name> open` or during
+// worktree-suffixed path resolution.
+const wtMissingHint = "hop: wt: not found on PATH."
+
 // fzfMissingHint is the exact stderr line printed when fzf is required but absent.
 const fzfMissingHint = "hop: fzf is not installed. Install it: brew install fzf (macOS) or apt install fzf (Debian)."
 
@@ -48,7 +54,36 @@ func loadRepos() (repos.Repos, error) {
 // writing to any stderr. It returns errFzfMissing when fzf is needed but not
 // on PATH; the caller is responsible for writing fzfMissingHint to the
 // appropriate stderr. Returns errFzfCancelled on Esc/Ctrl-C.
+//
+// Grammar extension: when query contains a "/" character, it is split on the
+// FIRST "/" (repo names from hop.yaml are URL basenames and never contain
+// "/", so the first "/" unambiguously separates the repo portion from the
+// worktree portion even when wt worktree names themselves contain "/"). The
+// LHS resolves through the normal match-or-fzf algorithm; the RHS is matched
+// exactly against `wt list --json`'s `name` field within the resolved repo's
+// main checkout. The returned *Repo preserves Name/Group/URL/Dir from the
+// registry entry — only Path is replaced with the worktree's absolute path.
+//
+// Worktree-resolution errors (no-such-worktree, wt missing on PATH, malformed
+// JSON, uncloned repo) surface as *errExitCode with code 1 and a pre-formatted
+// stderr message so translateExit prints them verbatim. Empty LHS / RHS are
+// usage errors with code 2.
 func resolveByName(query string) (*repos.Repo, error) {
+	if idx := strings.Index(query, "/"); idx >= 0 {
+		lhs, rhs := query[:idx], query[idx+1:]
+		if lhs == "" {
+			return nil, &errExitCode{code: 2, msg: "hop: empty repo name before '/'"}
+		}
+		if rhs == "" {
+			return nil, &errExitCode{code: 2, msg: "hop: empty worktree name after '/'"}
+		}
+		repo, err := resolveByName(lhs)
+		if err != nil {
+			return nil, err
+		}
+		return resolveWorktreePath(repo, rhs)
+	}
+
 	rs, err := loadRepos()
 	if err != nil {
 		return nil, err
@@ -90,6 +125,54 @@ func resolveByName(query string) (*repos.Repo, error) {
 		}
 	}
 	return nil, fmt.Errorf("hop: selection %q not found in repo list", selected)
+}
+
+// resolveWorktreePath returns a shallow copy of repo with Path replaced by
+// the worktree's absolute path. The worktree is located by invoking
+// `wt list --json` in repo.Path and matching wtName against each entry's
+// Name field (exact, case-sensitive — mirrors the case-sensitive group-name
+// match in resolveTargets).
+//
+// Error surfaces (all *errExitCode with code 1 so translateExit prints the
+// pre-formatted message verbatim):
+//   - repo not cloned on disk → "hop: '<name>' is not cloned. Try: hop clone <name>"
+//   - wt missing on PATH      → wtMissingHint
+//   - wt list / JSON failure  → "hop: wt list: <err>"
+//   - no matching worktree    → "hop: worktree '<wt>' not found in '<name>'.
+//     Try: wt list (in <path>) or hop ls --trees"
+//
+// The uncloned guard applies ONLY here — bare queries (no "/") retain their
+// existing permissive behavior of resolving registry paths even for repos
+// that haven't been cloned yet.
+func resolveWorktreePath(repo *repos.Repo, wtName string) (*repos.Repo, error) {
+	state, err := cloneState(repo.Path)
+	if err != nil {
+		return nil, err
+	}
+	if state != stateAlreadyCloned {
+		return nil, &errExitCode{
+			code: 1,
+			msg:  fmt.Sprintf("hop: '%s' is not cloned. Try: hop clone %s", repo.Name, repo.Name),
+		}
+	}
+	entries, err := listWorktrees(context.Background(), repo.Path)
+	if err != nil {
+		if errors.Is(err, proc.ErrNotFound) {
+			return nil, &errExitCode{code: 1, msg: wtMissingHint}
+		}
+		return nil, &errExitCode{code: 1, msg: fmt.Sprintf("hop: wt list: %v", err)}
+	}
+	for _, e := range entries {
+		if e.Name == wtName {
+			out := *repo
+			out.Path = e.Path
+			return &out, nil
+		}
+	}
+	return nil, &errExitCode{
+		code: 1,
+		msg:  fmt.Sprintf("hop: worktree '%s' not found in '%s'. Try: wt list (in %s) or hop ls --trees", wtName, repo.Name, repo.Path),
+	}
 }
 
 // buildPickerLines builds the tab-separated lines piped to fzf. When two or

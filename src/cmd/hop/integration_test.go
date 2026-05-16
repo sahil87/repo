@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -417,4 +418,152 @@ hop probe where`
 	if got := strings.TrimSpace(string(out)); got != want {
 		t.Fatalf("expected %q, got %q", want, got)
 	}
+}
+
+// writeFakeWtListShim builds a fake `wt` binary that responds to
+// `wt list --json` with a canned JSON blob keyed by the basename of $PWD.
+// The script ignores other wt subcommands (exits 0 with no output) — only
+// `list --json` matters for the worktree-resolution path. Keying on basename
+// (rather than full path) sidesteps macOS's /tmp ↔ /private/tmp symlink
+// dance: the hop binary sets cmd.Dir to whatever repos.FromConfig produced,
+// which may differ from the EvalSymlinks-resolved form bash sees as $PWD.
+// Returns the dir to prepend to PATH.
+func writeFakeWtListShim(t *testing.T, jsonByBasename map[string]string) string {
+	t.Helper()
+	binDir := t.TempDir()
+	wtPath := filepath.Join(binDir, "wt")
+
+	var sb strings.Builder
+	sb.WriteString("#!/usr/bin/env bash\n")
+	sb.WriteString("# fake wt for integration test — driven by basename($PWD)\n")
+	sb.WriteString(`if [[ "$1" == "list" && "$2" == "--json" ]]; then` + "\n")
+	sb.WriteString(`  base="$(basename "$PWD")"` + "\n")
+	for b, j := range jsonByBasename {
+		sb.WriteString(`  if [[ "$base" == "` + b + `" ]]; then cat <<'WTJSON'` + "\n")
+		sb.WriteString(j)
+		if !strings.HasSuffix(j, "\n") {
+			sb.WriteString("\n")
+		}
+		sb.WriteString("WTJSON\n    exit 0\n  fi\n")
+	}
+	sb.WriteString("  echo '[]'\n  exit 0\nfi\n")
+	sb.WriteString("exit 0\n")
+
+	if err := os.WriteFile(wtPath, []byte(sb.String()), 0o755); err != nil {
+		t.Fatalf("write fake wt: %v", err)
+	}
+	return binDir
+}
+
+// TestIntegrationWorktreeResolution exercises the worktree-aware path
+// resolution end-to-end via the built binary. Covers the happy path
+// (worktree resolves), main worktree resolution, no-such-worktree error,
+// empty RHS / empty LHS usage errors.
+func TestIntegrationWorktreeResolution(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash required for fake wt shim")
+	}
+
+	bin := buildBinary(t)
+	parent := t.TempDir()
+	repoDir := filepath.Join(parent, "outbox")
+	wtPath := filepath.Join(parent, "outbox.worktrees", "feat-x")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	canonRepo, err := filepath.EvalSymlinks(repoDir)
+	if err != nil {
+		t.Fatalf("evalsymlinks: %v", err)
+	}
+
+	yaml := filepath.Join(parent, "hop.yaml")
+	body := fmt.Sprintf(`repos:
+  default:
+    dir: %s
+    urls:
+      - git@github.com:sahil87/outbox.git
+`, parent)
+	if err := os.WriteFile(yaml, []byte(body), 0o644); err != nil {
+		t.Fatalf("write yaml: %v", err)
+	}
+
+	listJSON := fmt.Sprintf(`[
+  {"name":"main","branch":"main","path":"%s","is_main":true,"is_current":false,"dirty":false,"unpushed":0},
+  {"name":"feat-x","branch":"feat-x","path":"%s","is_main":false,"is_current":true,"dirty":true,"unpushed":2}
+]`, canonRepo, wtPath)
+	binDir := writeFakeWtListShim(t, map[string]string{"outbox": listJSON})
+
+	env := append(os.Environ(),
+		"HOP_CONFIG="+yaml,
+		"PATH="+binDir+":"+os.Getenv("PATH"),
+	)
+
+	t.Run("worktree where resolves", func(t *testing.T) {
+		cmd := exec.Command(bin, "outbox/feat-x", "where")
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("hop outbox/feat-x where: %v\noutput: %s", err, out)
+		}
+		if got := strings.TrimSpace(string(out)); got != wtPath {
+			t.Fatalf("got %q, want worktree path %q", got, wtPath)
+		}
+	})
+
+	t.Run("main worktree resolves to main checkout", func(t *testing.T) {
+		cmd := exec.Command(bin, "outbox/main", "where")
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("hop outbox/main where: %v\noutput: %s", err, out)
+		}
+		if got := strings.TrimSpace(string(out)); got != canonRepo {
+			t.Fatalf("got %q, want main path %q", got, canonRepo)
+		}
+	})
+
+	t.Run("unknown worktree exits 1 with hint", func(t *testing.T) {
+		cmd := exec.Command(bin, "outbox/nonexistent", "where")
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Fatalf("expected non-zero exit, got nil. output: %s", out)
+		}
+		if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
+			t.Fatalf("expected exit 1, got %v", err)
+		}
+		if !strings.Contains(string(out), "worktree 'nonexistent' not found in 'outbox'") {
+			t.Fatalf("expected no-such-worktree hint, got: %s", out)
+		}
+	})
+
+	t.Run("empty RHS is usage error", func(t *testing.T) {
+		cmd := exec.Command(bin, "outbox/", "where")
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Fatalf("expected non-zero exit, got nil. output: %s", out)
+		}
+		if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 2 {
+			t.Fatalf("expected exit 2, got %v\noutput: %s", err, out)
+		}
+		if !strings.Contains(string(out), "empty worktree name after '/'") {
+			t.Fatalf("expected empty-RHS hint, got: %s", out)
+		}
+	})
+
+	t.Run("empty LHS is usage error", func(t *testing.T) {
+		cmd := exec.Command(bin, "/feat-x", "where")
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Fatalf("expected non-zero exit, got nil. output: %s", out)
+		}
+		if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 2 {
+			t.Fatalf("expected exit 2, got %v\noutput: %s", err, out)
+		}
+		if !strings.Contains(string(out), "empty repo name before '/'") {
+			t.Fatalf("expected empty-LHS hint, got: %s", out)
+		}
+	})
 }

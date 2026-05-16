@@ -30,7 +30,7 @@ func runOpen(cmd *cobra.Command, name string) error {
 	code, err := proc.RunForeground(context.Background(), "", "wt", "open", repo.Path)
 	if err != nil {
 		if errors.Is(err, proc.ErrNotFound) {
-			fmt.Fprintln(cmd.ErrOrStderr(), "hop: wt: not found on PATH.")
+			fmt.Fprintln(cmd.ErrOrStderr(), wtMissingHint)
 			return errSilent
 		}
 		fmt.Fprintf(cmd.ErrOrStderr(), "hop: open: %v\n", err)

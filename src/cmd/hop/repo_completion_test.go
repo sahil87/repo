@@ -1,10 +1,16 @@
 package main
 
 import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/sahil87/hop/internal/proc"
 )
 
 const completionYAML = `repos:
@@ -386,6 +392,170 @@ func TestCompletionThirdPositionalSuppressed(t *testing.T) {
 	}
 	if got := candidatesFrom(stdout.String()); len(got) > 0 {
 		t.Fatalf("expected no candidates at position 3, got: %v", got)
+	}
+}
+
+// makeCompletionFixture builds a hop.yaml + on-disk repo named `name` and
+// returns the resolved repo path.
+func makeCompletionFixture(t *testing.T, name string, cloned bool) string {
+	t.Helper()
+	parent := t.TempDir()
+	repoDir := filepath.Join(parent, name)
+	if cloned {
+		if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+	}
+	yaml := fmt.Sprintf(`repos:
+  default:
+    dir: %s
+    urls:
+      - git@github.com:sahil87/%s.git
+`, parent, name)
+	writeReposFixture(t, yaml)
+	return repoDir
+}
+
+// TestCompletionWorktreeSlashOffersCandidates exercises the new worktree
+// prefix branch. With `toComplete = "outbox/"`, completion must surface each
+// worktree name prefixed with `outbox/` so cobra's prefix-match-on-toComplete
+// substitutes correctly.
+func TestCompletionWorktreeSlashOffersCandidates(t *testing.T) {
+	repoDir := makeCompletionFixture(t, "outbox", true)
+	withListWorktrees(t, func(ctx context.Context, repoPath string) ([]WtEntry, error) {
+		if repoPath != repoDir {
+			t.Errorf("listWorktrees called with %q, want %q", repoPath, repoDir)
+		}
+		return []WtEntry{
+			{Name: "main", Path: repoDir, IsMain: true},
+			{Name: "feat-x", Path: repoDir + ".worktrees/feat-x"},
+			{Name: "hotfix", Path: repoDir + ".worktrees/hotfix"},
+		}, nil
+	})
+
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "outbox/")
+	if err != nil {
+		t.Fatalf("__complete outbox/: %v", err)
+	}
+	cands := candidatesFrom(stdout.String())
+	want := []string{"outbox/main", "outbox/feat-x", "outbox/hotfix"}
+	for _, w := range want {
+		found := false
+		for _, c := range cands {
+			if c == w {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("missing candidate %q in %v", w, cands)
+		}
+	}
+}
+
+// TestCompletionWorktreePartialAfterSlash verifies the prefix branch fires
+// for `outbox/feat` (partial wt name), returning the full set prefixed —
+// cobra's prefix-match narrows the visible list.
+func TestCompletionWorktreePartialAfterSlash(t *testing.T) {
+	repoDir := makeCompletionFixture(t, "outbox", true)
+	withListWorktrees(t, func(ctx context.Context, repoPath string) ([]WtEntry, error) {
+		return []WtEntry{
+			{Name: "main", Path: repoDir},
+			{Name: "feat-x", Path: repoDir + ".worktrees/feat-x"},
+			{Name: "feat-y", Path: repoDir + ".worktrees/feat-y"},
+		}, nil
+	})
+
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "outbox/feat")
+	if err != nil {
+		t.Fatalf("__complete outbox/feat: %v", err)
+	}
+	cands := candidatesFrom(stdout.String())
+	for _, want := range []string{"outbox/feat-x", "outbox/feat-y"} {
+		found := false
+		for _, c := range cands {
+			if c == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("missing candidate %q in %v", want, cands)
+		}
+	}
+}
+
+// TestCompletionWorktreeUnclonedSilent verifies that a `/`-prefixed completion
+// against an uncloned repo returns no candidates and writes nothing to stderr.
+func TestCompletionWorktreeUnclonedSilent(t *testing.T) {
+	makeCompletionFixture(t, "loom", false)
+	withListWorktrees(t, func(ctx context.Context, repoPath string) ([]WtEntry, error) {
+		t.Fatalf("listWorktrees called against uncloned repo; want NOT called")
+		return nil, nil
+	})
+
+	stdout, stderr, err := runArgs(t, cobra.ShellCompRequestCmd, "loom/")
+	if err != nil {
+		t.Fatalf("__complete loom/: %v", err)
+	}
+	if got := candidatesFrom(stdout.String()); len(got) > 0 {
+		t.Errorf("expected no candidates for uncloned repo, got %v", got)
+	}
+	// Cobra's __complete always writes a "Completion ended with directive:"
+	// line to stderr — that's expected output, not a hop-level error. We just
+	// want to assert hop itself did not emit any error wording.
+	if strings.Contains(stderr.String(), "hop:") {
+		t.Errorf("expected no hop-level stderr output, got %q", stderr.String())
+	}
+}
+
+// TestCompletionWorktreeMissingWtSilent verifies that when wt is not on PATH,
+// `/`-prefix completion returns no candidates silently — no `not found`
+// stderr line during TAB.
+func TestCompletionWorktreeMissingWtSilent(t *testing.T) {
+	makeCompletionFixture(t, "outbox", true)
+	withListWorktrees(t, func(ctx context.Context, repoPath string) ([]WtEntry, error) {
+		return nil, proc.ErrNotFound
+	})
+
+	stdout, stderr, err := runArgs(t, cobra.ShellCompRequestCmd, "outbox/")
+	if err != nil {
+		t.Fatalf("__complete outbox/: %v", err)
+	}
+	if got := candidatesFrom(stdout.String()); len(got) > 0 {
+		t.Errorf("expected no candidates when wt missing, got %v", got)
+	}
+	if strings.Contains(stderr.String(), "wt") {
+		t.Errorf("expected silent failure (no `wt` mention on stderr), got %q", stderr.String())
+	}
+}
+
+// TestCompletionVerbPositionUnaffectedByWorktreeBranch verifies the existing
+// verb-position completion (`hop <name> <TAB>` → cd/where/open) is unchanged
+// by the worktree-prefix branch — the `/`-detection only operates on args[0]
+// / the toComplete slot.
+func TestCompletionVerbPositionUnaffectedByWorktreeBranch(t *testing.T) {
+	makeCompletionFixture(t, "outbox", true)
+	withListWorktrees(t, func(ctx context.Context, repoPath string) ([]WtEntry, error) {
+		t.Fatalf("listWorktrees called at $2 verb position; want NOT called")
+		return nil, nil
+	})
+
+	stdout, _, err := runArgs(t, cobra.ShellCompRequestCmd, "outbox", "")
+	if err != nil {
+		t.Fatalf("__complete outbox <empty>: %v", err)
+	}
+	cands := candidatesFrom(stdout.String())
+	wantVerbs := map[string]bool{"cd": false, "where": false, "open": false}
+	for _, c := range cands {
+		if _, ok := wantVerbs[c]; ok {
+			wantVerbs[c] = true
+		}
+	}
+	for verb, found := range wantVerbs {
+		if !found {
+			t.Errorf("expected verb %q at $2, got: %v", verb, cands)
+		}
 	}
 }
 

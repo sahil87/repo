@@ -89,6 +89,7 @@ Per Constitution Principle IV ("Wrap, Don't Reinvent") — wrap external tools, 
 | YAML parsing | `internal/config/config.go` calls `yaml.Unmarshal` directly into `*yaml.Node` | `gopkg.in/yaml.v3` already is the wrapper. |
 | `-R` child exec | `cmd/hop/main.go::runDashR` calls `proc.RunForeground` | Wrapping is `internal/proc`'s job; the binary just composes. |
 | `wt open` invocation | `cmd/hop/open.go::runOpen` calls `proc.RunForeground(ctx, "", "wt", "open", repo.Path)` inline | Single operation; the binary is a transparent passthrough — the cd-handoff and env setup live in the shim, not the binary. A dedicated `internal/wt/` package would have nothing to encapsulate (one `RunForeground` call). |
+| `wt list --json` invocation | `cmd/hop/wt_list.go::defaultListWorktrees` calls `proc.RunCapture(ctx, repoPath, "wt", "list", "--json")` and unmarshals into `[]WtEntry`. Used by `resolve.go::resolveWorktreePath` (single-worktree path resolution for the `<name>/<wt>` grammar suffix) and `ls.go::runLsTrees` (fan-out for `hop ls --trees`). | Two call sites — same "promote later" rationale as `internal/git/`. Logic is a thin `RunCapture` + JSON unmarshal; a dedicated `internal/wt/` package would add an indirection without containing logic. The helper lives in `cmd/hop/` as a package-level `var listWorktrees = defaultListWorktrees` seam (mirroring `internal/fzf/fzf.go::runInteractive`) so tests inject fakes without spawning a real `wt`. Promote to `internal/wt/` if a third call site emerges. |
 
 ## `wt` integration (`cmd/hop/open.go` + shim)
 
@@ -110,6 +111,59 @@ Two env vars cross the shim→wt boundary (the binary is a passive carrier — t
 **Why no `internal/wt` wrapper package**: the binary's call site is one `proc.RunForeground` line; there's nothing to encapsulate. The env-orchestration that *would* warrant a wrapper lives in the shim (shell, not Go). If hop grows additional wt-delegating verbs that share Go-side env construction (none planned), promote then.
 
 **Direct binary invocation** (no shim, e.g., `/path/to/hop outbox open`): the binary still execs `wt open <path>` correctly. wt's interactive menu reaches the user's terminal. Picking "Open here" with no `WT_CD_FILE` set falls through to wt's own `cd -- '<path>'` printout + `wt shell-setup` install hint — that's wt's contract, surfacing transparently.
+
+## `wt list --json` integration (`cmd/hop/wt_list.go`)
+
+`wt list --json` is the second wt subcommand hop invokes from Go (alongside `wt open`). Added in change `7eab` to support the `hop <name>/<wt-name>` grammar extension and the `hop ls --trees` flag. The invocation is a thin `proc.RunCapture` + JSON unmarshal — no env-var orchestration, no interactive stdio, no cd-handoff (those concerns belong to `open.go` and the shim).
+
+### Contract
+
+```go
+const wtListTimeout = 5 * time.Second
+
+type WtEntry struct {
+    Name      string `json:"name"`
+    Branch    string `json:"branch"`
+    Path      string `json:"path"`
+    IsMain    bool   `json:"is_main"`
+    IsCurrent bool   `json:"is_current"`
+    Dirty     bool   `json:"dirty"`
+    Unpushed  int    `json:"unpushed"`
+}
+
+var listWorktrees = defaultListWorktrees
+
+func defaultListWorktrees(ctx context.Context, repoPath string) ([]WtEntry, error) {
+    ctx, cancel := context.WithTimeout(ctx, wtListTimeout)
+    defer cancel()
+    out, err := proc.RunCapture(ctx, repoPath, "wt", "list", "--json")
+    if err != nil {
+        return nil, err
+    }
+    return unmarshalWtEntries(out)
+}
+```
+
+| Aspect | Value / rationale |
+|---|---|
+| Subprocess routing | `proc.RunCapture(ctx, repoPath, "wt", "list", "--json")` — Constitution Principle I (no direct `os/exec` outside `internal/proc/`). `cmd.Dir = repoPath` runs wt in the resolved repo's main checkout so wt discovers worktrees via `.git/worktrees/`. |
+| Per-call timeout | 5 seconds, set via `context.WithTimeout` inside `defaultListWorktrees`. Matches `internal/scan`'s precedent for `git remote` invocations. wt list is a local op (reads `.git/worktrees/`) with no network round-trip, so 5s is generous. |
+| JSON unmarshal | `encoding/json` default — `[]WtEntry` with `json` tags matching wt's documented schema. Unknown fields are silently ignored (no `DisallowUnknownFields`) so future wt schema additions don't break hop. Unmarshal failures are wrapped with `fmt.Errorf("wt list: %w", err)` so callers can route the error through the `hop: wt list: <err>` stderr line without further wrapping. |
+| Test seam | Package-level `var listWorktrees = defaultListWorktrees` in `wt_list.go` — exactly the seam pattern used by `internal/fzf/fzf.go::runInteractive`. Tests swap `listWorktrees` to inject canned `[]WtEntry` or trigger error paths without needing a real `wt` binary on PATH. |
+| Error surfaces | `proc.ErrNotFound` (wt missing on PATH — callers match via `errors.Is` to produce `wtMissingHint`); JSON unmarshal errors wrapped with `wt list:` prefix; any other subprocess error returned verbatim. All four wt-list error wordings (uncloned-with-`/`, wt missing, malformed JSON, no-such-worktree) are formatted by the callers (`resolveWorktreePath` and `runLsTrees`), not by `defaultListWorktrees` itself. |
+
+### Call sites
+
+- `resolve.go::resolveWorktreePath` — single-worktree lookup invoked by `resolveByName`'s `/`-suffix branch. Resolves `hop <name>/<wt> where`, `hop <name>/<wt> open`, `hop <name>/<wt> -R`, and the shim's `hop <name>/<wt> <tool>` tool-form.
+- `ls.go::runLsTrees` — fans `wt list --json` across every cloned repo in `hop.yaml` source order for the `hop ls --trees` flag. Per-row failures degrade gracefully as inline `(wt list failed: <err>)` rows; the FIRST `proc.ErrNotFound` aborts the run with `wtMissingHint`.
+
+### Why no `internal/wt/` package
+
+Two call sites is below the threshold for a dedicated wrapper package — same "promote later" rationale as `internal/git/`'s non-creation (which has more call sites than this and still stays inline). The helper is a thin `RunCapture` + JSON unmarshal; extracting to `internal/wt/` would add an indirection without containing logic. The `cmd/hop/wt_list.go` location keeps the `WtEntry` type next to its only consumers (`resolveWorktreePath` and `runLsTrees`) and keeps the test seam in the same package as the tests that swap it. Promote to `internal/wt/` if a third call site emerges (e.g., a future `hop wt-status`-shaped verb).
+
+### Why no env-var orchestration
+
+Unlike `wt open` (which the shim wraps with `WT_CD_FILE` / `WT_WRAPPER` to handle the "Open here" cd-handoff), `wt list --json` is a pure read — no shell-mutation side channel, no interactive stdio, no orchestration needed. The hop side is just `RunCapture` and unmarshal; no shim changes were required for this surface.
 
 ## Composability primitives
 
