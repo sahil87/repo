@@ -23,3 +23,4 @@
 {"action":"enter","driver":"fab-fff","event":"stage-transition","stage":"review-pr","ts":"2026-05-16T14:36:48Z"}
 {"cmd":"git-pr-review","event":"command","ts":"2026-05-16T14:37:46Z"}
 {"delta":"+0.0","event":"confidence","score":5,"trigger":"calc-score","ts":"2026-05-16T14:48:49Z"}
+{"event":"review","result":"passed","ts":"2026-05-16T14:50:08Z"}
