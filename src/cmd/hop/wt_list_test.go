@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/sahil87/hop/internal/proc"
@@ -18,11 +17,10 @@ func withListWorktrees(t *testing.T, fn func(ctx context.Context, repoPath strin
 	t.Cleanup(func() { listWorktrees = prev })
 }
 
-// TestDefaultListWorktreesUnmarshalsValidJSON verifies the default
-// implementation parses wt's documented schema into []WtEntry. We swap the
-// inner RunCapture would require touching proc; instead we exercise the
-// unmarshal half via a small inline wrapper that mirrors defaultListWorktrees
-// without spawning a process.
+// TestWtEntryUnmarshalsValidJSON exercises the unmarshal half of the wt
+// integration directly — swapping the inner RunCapture call in
+// defaultListWorktrees would require touching internal/proc, so we test the
+// pure JSON-to-WtEntry contract via unmarshalWtEntries instead.
 func TestWtEntryUnmarshalsValidJSON(t *testing.T) {
 	const blob = `[
 	  {"name":"main","branch":"main","path":"/repo","is_main":true,"is_current":false,"dirty":false,"unpushed":0},
@@ -101,12 +99,16 @@ func TestListWorktreesSeamReturnsInjectedEntries(t *testing.T) {
 	}
 }
 
-// TestDefaultListWorktreesWrapsUnmarshalError verifies that the wrapping
-// prefix ("wt list: ") is present so callers can route the error through the
-// "hop: wt list: <err>" stderr line without further wrapping.
-func TestDefaultListWorktreesWrapsUnmarshalError(t *testing.T) {
+// TestUnmarshalWtEntriesReturnsErrorVerbatim locks in the contract that
+// unmarshalWtEntries does NOT prefix its error with "wt list:" — the prefix
+// is owned by callers (resolveWorktreePath, runLsTrees) so the label appears
+// at exactly one layer in the final user-facing message.
+func TestUnmarshalWtEntriesReturnsErrorVerbatim(t *testing.T) {
 	_, err := unmarshalWtEntries([]byte(`not json`))
-	if err == nil || !strings.HasPrefix(err.Error(), "wt list:") {
-		t.Fatalf("expected error prefixed with 'wt list:', got %v", err)
+	if err == nil {
+		t.Fatalf("expected error for malformed JSON, got nil")
+	}
+	if msg := err.Error(); len(msg) >= 8 && msg[:8] == "wt list:" {
+		t.Fatalf("error should not be prefixed with 'wt list:' (callers own that prefix); got %q", msg)
 	}
 }

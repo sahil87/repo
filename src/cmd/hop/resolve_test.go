@@ -473,8 +473,11 @@ func TestResolveByNameWtMissingOnPATH(t *testing.T) {
 
 func TestResolveByNameMalformedJSONSurfaces(t *testing.T) {
 	makeClonedRepoFixture(t, "outbox")
+	// listWorktrees returns the raw json.Unmarshal error verbatim (the
+	// "wt list:" prefix is owned by this caller, not the seam) — see
+	// unmarshalWtEntries' contract in wt_list.go.
 	withListWorktrees(t, func(ctx context.Context, repoPath string) ([]WtEntry, error) {
-		return nil, fmt.Errorf("wt list: invalid character 'n' looking for beginning of value")
+		return nil, fmt.Errorf("invalid character 'n' looking for beginning of value")
 	})
 
 	_, err := resolveByName("outbox/feat-x")
@@ -487,6 +490,11 @@ func TestResolveByNameMalformedJSONSurfaces(t *testing.T) {
 	}
 	if !strings.HasPrefix(withCode.msg, "hop: wt list:") {
 		t.Errorf("expected prefix 'hop: wt list:', got %q", withCode.msg)
+	}
+	// Guard against prefix duplication regressing (the bug Copilot flagged):
+	// the label "wt list:" must appear exactly once, not "hop: wt list: wt list: ...".
+	if strings.Count(withCode.msg, "wt list:") != 1 {
+		t.Errorf("expected single 'wt list:' label, got %q", withCode.msg)
 	}
 }
 

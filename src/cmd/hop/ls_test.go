@@ -139,7 +139,10 @@ func TestLsTreesPerRowFailureDegradesGracefully(t *testing.T) {
 
 	withListWorktrees(t, func(ctx context.Context, repoPath string) ([]WtEntry, error) {
 		if repoPath == filepath.Join(parent, "clonedA") {
-			return nil, fmt.Errorf("wt list: corrupt .git/worktrees")
+			// listWorktrees returns errors verbatim; the "wt list failed:"
+			// prefix is added by runLsTrees. See unmarshalWtEntries' contract
+			// in wt_list.go.
+			return nil, fmt.Errorf("corrupt .git/worktrees")
 		}
 		if repoPath == filepath.Join(parent, "clonedB") {
 			return []WtEntry{{Name: "main", Path: repoPath, IsMain: true}}, nil
@@ -154,6 +157,11 @@ func TestLsTreesPerRowFailureDegradesGracefully(t *testing.T) {
 	out := stdout.String()
 	if !strings.Contains(out, "clonedA") || !strings.Contains(out, "(wt list failed:") {
 		t.Errorf("expected clonedA row with `(wt list failed:`, got: %q", out)
+	}
+	// Guard against prefix duplication regressing: the "wt list" label should
+	// appear exactly once per row (not "wt list failed: wt list: corrupt ...").
+	if strings.Count(out, "wt list") != 1 {
+		t.Errorf("expected single 'wt list' label in output, got: %q", out)
 	}
 	// clonedB row still present despite clonedA failure.
 	if !strings.Contains(out, "clonedB") || !strings.Contains(out, "1 tree") {

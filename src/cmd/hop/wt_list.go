@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/sahil87/hop/internal/proc"
@@ -40,7 +39,9 @@ type WtEntry struct {
 //   - proc.ErrNotFound when `wt` is not on PATH (callers may match via
 //     errors.Is to produce the install hint).
 //   - Any other subprocess error is returned verbatim.
-//   - JSON unmarshal failures are wrapped as "wt list: <err>".
+//   - JSON unmarshal failures are returned verbatim — callers own the
+//     "wt list:" / "wt list failed:" prefix so the error label is added at
+//     exactly one layer.
 var listWorktrees = defaultListWorktrees
 
 func defaultListWorktrees(ctx context.Context, repoPath string) ([]WtEntry, error) {
@@ -55,13 +56,13 @@ func defaultListWorktrees(ctx context.Context, repoPath string) ([]WtEntry, erro
 
 // unmarshalWtEntries parses wt's `list --json` output into []WtEntry.
 // Extracted from defaultListWorktrees so the JSON contract can be exercised
-// in tests without spawning a process. Unmarshal failures are wrapped with a
-// "wt list: " prefix so callers can route the error through the
-// "hop: wt list: <err>" stderr line without further wrapping.
+// in tests without spawning a process. The error is returned verbatim — the
+// "wt list:" prefix is added by callers (resolveWorktreePath, runLsTrees) so
+// the label appears at exactly one layer in the final user-facing message.
 func unmarshalWtEntries(out []byte) ([]WtEntry, error) {
 	var entries []WtEntry
 	if err := json.Unmarshal(out, &entries); err != nil {
-		return nil, fmt.Errorf("wt list: %w", err)
+		return nil, err
 	}
 	return entries, nil
 }

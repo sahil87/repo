@@ -15,9 +15,9 @@ import (
 )
 
 // wtMissingHint is the exact stderr line printed when `wt` is needed but not
-// on PATH. Mirrored from cmd/hop/open.go so the wording stays consistent
-// whether the missing-wt error surfaces during `hop <name> open` or during
-// worktree-suffixed path resolution.
+// on PATH. Shared between cmd/hop/open.go, cmd/hop/ls.go, and the
+// worktree-suffixed path resolution below so the wording stays consistent
+// across every wt-touching code path.
 const wtMissingHint = "hop: wt: not found on PATH."
 
 // fzfMissingHint is the exact stderr line printed when fzf is required but absent.
