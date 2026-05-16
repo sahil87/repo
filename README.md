@@ -9,7 +9,7 @@ A small Go CLI that turns one config file (`hop.yaml`) into a personal directory
 ## Why hop?
 
 - **One config, every machine** — `hop.yaml` lists every repo you care about (with groups). Drop it in Dropbox, dotfiles, or `$HOP_CONFIG`, and your repo directory follows you between laptops.
-- **Fuzzy navigation** — `h ot<TAB>` or `hop ot` fuzzy-matches `outbox` and `cd`s your shell straight there. No more `cd ~/code/sahil87/outbox`.
+- **Substring navigation** — `h ou<TAB>` or `hop ou` matches `outbox` and `cd`s your shell straight there. No more `cd ~/code/sahil87/outbox`.
 - **Run anything inside a repo, from anywhere** — `hop dotfiles cursor` opens your dotfiles in Cursor without changing your cwd. Works for any tool: `hop outbox git status`, `hop infra-tf terraform plan`, `hop loom npm test`.
 - **Batch git ops over groups** — `hop pull --all` pulls every cloned repo. `hop sync work` rebases-and-pushes every repo in the `work` group. Group-level fan-out built in.
 - **Bootstrap from disk, not yaml-by-hand** — `hop config scan ~/code` walks your existing clones, reads `git remote`, and populates `hop.yaml` for you. Comment-preserving merges, idempotent re-runs.
@@ -126,7 +126,7 @@ idea           /Users/sahil/code/sahil87/idea
 $ hop outbox where
 /Users/sahil/code/sahil87/outbox
 
-$ h out                       # fuzzy substring match → cd into outbox
+$ h out                       # substring match → cd into outbox
 $ pwd
 /Users/sahil/code/sahil87/outbox
 
@@ -232,7 +232,7 @@ A flat list (`default` above) uses convention: each URL lands at `<code_root>/<o
 
 - **`hop <name>` and `h <name>` need the shell shim.** A binary can't change its parent shell's cwd — that's the same Unix constraint wt hits with its "Open here" menu option. Without the shim, the binary prints a hint pointing at `eval "$(hop shell-init zsh)"` or the workaround `cd "$(hop <name> where)"`.
 - **Tool-form (`hop <name> <tool>`) is shim-only too.** The shim rewrites it to `hop -R <name> <tool>` before the binary sees it. In scripts and CI, use the binary-direct form `hop -R <name> <tool> ...` (and `hop <name> where` for path resolution — that one's handled by the binary).
-- **Substring match is on the repo name only.** Not URL, not path, not group. `hop ot` matches `outbox` but not the URL `git@github.com:org/outbox.git`. When two repos in different groups share a name, the picker shows `name [group]` to disambiguate.
+- **Substring match is on the repo name only.** Not URL, not path, not group. `hop ou` matches `outbox` but not the URL `git@github.com:org/outbox.git`. When two repos in different groups share a name, the picker shows `name [group]` to disambiguate.
 - **No `--force` on `push` or `sync`.** Intentional — for nuanced single-repo cases, reach for `hop <name> -R git push --force` and you'll get the full git output. The batch wrappers stay safe by default.
 - **`hop <name> cursor` / `code` need a trailing `.`** — e.g. `hop dotfiles cursor .`. Not a hop quirk: both editors take `[paths...]` as positional args and, when invoked with none, restore the previously open folder instead of opening the cwd. The `.` is what tells them "open *this* directory." Tools that operate on cwd by default (`git status`, `terraform plan`, `ls`, `npm test`) don't need it.
 - **The `<name>/<wt>` suffix needs `wt` on `PATH`.** Hop shells out to `wt list --json` to resolve the worktree name (no state cached in `hop.yaml` — worktrees are wt's domain). Bare `hop <name>` queries never invoke wt. The Homebrew formula pulls wt in as a dependency; for non-brew installs, `brew install sahil87/tap/wt` or build from source.
