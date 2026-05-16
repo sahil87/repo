@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -587,5 +589,116 @@ func TestCompletionCloneSuppressesOnAllFlag(t *testing.T) {
 	}
 	if got := candidatesFrom(stdout.String()); len(got) > 0 {
 		t.Fatalf("expected no candidates after --all, got: %v", got)
+	}
+}
+
+// TestCompletionEagerWorktreeExpansion exercises the pre-slash eager-expansion
+// branch added to `completeRepoNames`. The five cases below match the spec's
+// decision matrix in change 260516-odle-eager-worktree-completion: when a
+// unique cloned repo has >=2 worktrees, the candidate list gains worktree
+// suffixes and the directive flips on NoSpace. All other shapes fall back to
+// today's behavior.
+func TestCompletionEagerWorktreeExpansion(t *testing.T) {
+	cases := []struct {
+		name           string
+		toComplete     string
+		repos          []string // names to seed in hop.yaml (single group "default")
+		clonedRepos    []string // subset of repos with a `.git` dir
+		wtEntries      []WtEntry
+		wtErr          error
+		wtNotCalled    bool // if true, listWorktrees must NOT be invoked
+		wantCandidates []string
+		wantDirective  cobra.ShellCompDirective
+	}{
+		{
+			name:           "a unique match with 1 worktree falls back",
+			toComplete:     "outb",
+			repos:          []string{"outbox"},
+			clonedRepos:    []string{"outbox"},
+			wtEntries:      []WtEntry{{Name: "main", IsMain: true}},
+			wantCandidates: []string{"outbox"},
+			wantDirective:  cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:        "b unique match with multiple worktrees fires eager expansion",
+			toComplete:  "outb",
+			repos:       []string{"outbox"},
+			clonedRepos: []string{"outbox"},
+			wtEntries: []WtEntry{
+				{Name: "main", IsMain: true},
+				{Name: "feat-x"},
+				{Name: "bugfix-y"},
+			},
+			wantCandidates: []string{"outbox", "outbox/main", "outbox/feat-x", "outbox/bugfix-y"},
+			wantDirective:  cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace,
+		},
+		{
+			name:           "c unique match uncloned falls back silently",
+			toComplete:     "outb",
+			repos:          []string{"outbox"},
+			clonedRepos:    nil, // uncloned
+			wtNotCalled:    true,
+			wantCandidates: []string{"outbox"},
+			wantDirective:  cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:           "d unique match with listWorktrees error falls back silently",
+			toComplete:     "outb",
+			repos:          []string{"outbox"},
+			clonedRepos:    []string{"outbox"},
+			wtErr:          errors.New("wt list: malformed JSON"),
+			wantCandidates: []string{"outbox"},
+			wantDirective:  cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:           "e ambiguous prefix bypasses eager branch",
+			toComplete:     "co",
+			repos:          []string{"code", "colors", "coredns"},
+			clonedRepos:    []string{"code", "colors", "coredns"}, // would fire if guard absent
+			wtNotCalled:    true,
+			wantCandidates: []string{"code", "colors", "coredns"},
+			wantDirective:  cobra.ShellCompDirectiveNoFileComp,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			parent := t.TempDir()
+			cloned := make(map[string]bool, len(tc.clonedRepos))
+			for _, n := range tc.clonedRepos {
+				cloned[n] = true
+			}
+			var urls strings.Builder
+			for _, n := range tc.repos {
+				fmt.Fprintf(&urls, "      - git@github.com:sahil87/%s.git\n", n)
+				if cloned[n] {
+					if err := os.MkdirAll(filepath.Join(parent, n, ".git"), 0o755); err != nil {
+						t.Fatalf("mkdir %s/.git: %v", n, err)
+					}
+				}
+			}
+			yaml := fmt.Sprintf("repos:\n  default:\n    dir: %s\n    urls:\n%s", parent, urls.String())
+			writeReposFixture(t, yaml)
+
+			called := false
+			withListWorktrees(t, func(ctx context.Context, repoPath string) ([]WtEntry, error) {
+				called = true
+				if tc.wtNotCalled {
+					t.Fatalf("listWorktrees called unexpectedly with %q", repoPath)
+				}
+				return tc.wtEntries, tc.wtErr
+			})
+
+			gotCands, gotDir := completeRepoNames(newRootCmd(), nil, tc.toComplete)
+			if tc.wtNotCalled && called {
+				t.Fatalf("listWorktrees was invoked but should not have been")
+			}
+			if !reflect.DeepEqual(gotCands, tc.wantCandidates) {
+				t.Fatalf("candidates mismatch:\n  got:  %v\n  want: %v", gotCands, tc.wantCandidates)
+			}
+			if gotDir != tc.wantDirective {
+				t.Fatalf("directive mismatch: got %d, want %d", gotDir, tc.wantDirective)
+			}
+		})
 	}
 }

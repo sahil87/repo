@@ -25,6 +25,15 @@ import (
 // wt missing, JSON error) returns nil candidates silently — completion is a
 // UX surface; stderr noise during TAB is a bug.
 //
+// Eager pre-slash branch: when toComplete does NOT contain "/" AND
+// rs.MatchOne(toComplete) returns exactly one non-collided repo that is
+// cloned with >=2 worktrees, the candidate list is expanded to
+// [<repo>, <repo>/<wt1>, ...] with directive
+// ShellCompDirectiveNoFileComp|ShellCompDirectiveNoSpace so the user sees
+// the worktree menu without typing "/". The unique-match guard is the cost
+// gate — ambiguous prefixes never run `wt list --json` across N repos. Every
+// failure mode silently falls back to today's candidate list and directive.
+//
 // Names that collide with one of cmd's own subcommands are filtered out:
 // cobra dispatches the first token to the subcommand before the bare-form
 // resolver ever sees it, so advertising a repo named `clone` (for example)
@@ -68,6 +77,26 @@ func completeRepoNames(cmd *cobra.Command, args []string, toComplete string) ([]
 			continue
 		}
 		names = append(names, r.Name)
+	}
+	// Eager pre-slash branch: when toComplete uniquely identifies one non-collided
+	// repo that is cloned and has >=2 worktrees, expand the candidate list to
+	// include `<repo>/<wt>` forms so the user sees the worktree menu without
+	// typing `/`. NoSpace keeps the menu interactive after a bare-repo pick.
+	// Every failure mode silently falls back to the default candidate list.
+	if matches := rs.MatchOne(toComplete); len(matches) == 1 {
+		repo := matches[0]
+		if _, collides := subNames[repo.Name]; !collides {
+			if state, err := cloneState(repo.Path); err == nil && state == stateAlreadyCloned {
+				if entries, err := listWorktrees(context.Background(), repo.Path); err == nil && len(entries) >= 2 {
+					out := make([]string, 0, 1+len(entries))
+					out = append(out, repo.Name)
+					for _, e := range entries {
+						out = append(out, repo.Name+"/"+e.Name)
+					}
+					return out, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
+				}
+			}
+		}
 	}
 	return names, cobra.ShellCompDirectiveNoFileComp
 }
