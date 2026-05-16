@@ -13,7 +13,7 @@ A small Go CLI that turns one config file (`hop.yaml`) into a personal directory
 - **Run anything inside a repo, from anywhere** — `hop dotfiles cursor` opens your dotfiles in Cursor without changing your cwd. Works for any tool: `hop outbox git status`, `hop infra-tf terraform plan`, `hop loom npm test`.
 - **Batch git ops over groups** — `hop pull --all` pulls every cloned repo. `hop sync work` rebases-and-pushes every repo in the `work` group. Group-level fan-out built in.
 - **Bootstrap from disk, not yaml-by-hand** — `hop config scan ~/code` walks your existing clones, reads `git remote`, and populates `hop.yaml` for you. Comment-preserving merges, idempotent re-runs.
-- **Plays nicely with [`wt`](https://github.com/sahil87/wt)** — `hop <name> open` delegates to wt's app menu, so you get the same "open in editor / terminal / file manager / cd here" experience for every repo in the registry.
+- **Plays nicely with [`wt`](https://github.com/sahil87/wt)** — `hop <name> open` delegates to wt's app menu, so you get the same "open in editor / terminal / file manager / cd here" experience for every repo in the registry. The `hop <name>/<wt-name>` suffix lands you straight inside a worktree (`h outbox/feat-x` cds you there, `hop outbox/feat-x git status` runs git in it), and `hop ls --trees` shows worktree state across every repo at a glance.
 
 ## The mental model
 
@@ -41,7 +41,19 @@ hop  sync   work                    # 'work' is a group
 hop  clone  out<TAB>
 ```
 
-Same hop, same repo — just an ergonomic reorder for the case where the git verb is the first thing you think of. The full grammar (subcommands, verbs, flags) is in [Grammar at a glance](#grammar-at-a-glance) below.
+Same hop, same repo — just an ergonomic reorder for the case where the git verb is the first thing you think of.
+
+**Worktree form** — the repo slot accepts an optional `/<wt-name>` suffix. Everything else is unchanged; every verb (cd, where, open, tool-form, -R) inherits it:
+
+![hop](https://img.shields.io/badge/h-op-9ca3af?labelColor=1f6feb&style=for-the-badge) ![arrow](https://img.shields.io/badge/-%E2%86%92-lightgrey?style=for-the-badge) ![repo](https://img.shields.io/badge/re-po--name-9ca3af?labelColor=7c3aed&style=for-the-badge) ![sep](https://img.shields.io/badge/-%2F-lightgrey?style=for-the-badge) ![wt](https://img.shields.io/badge/fe-at--x-9ca3af?labelColor=0d9488&style=for-the-badge) ![arrow](https://img.shields.io/badge/-%E2%86%92-lightgrey?style=for-the-badge) ![cmd](https://img.shields.io/badge/command-059669?style=for-the-badge)
+
+```sh
+h  out<TAB>/fe<TAB>     git status              # → hop outbox/feat-x git status
+h  out<TAB>/<TAB>       cursor .                # → TAB after / lists worktrees of outbox
+hop  out<TAB>/main      where                   # → main-worktree path (same as bare `hop outbox where`)
+```
+
+The `/<wt-name>` resolves via `wt list --json`, so wt must be on `PATH` for any `/`-suffixed query — bare `hop outbox` is unaffected. The full grammar (subcommands, verbs, flags) is in [Grammar at a glance](#grammar-at-a-glance) below.
 
 ## Install
 
@@ -118,10 +130,22 @@ $ h out                       # fuzzy substring match → cd into outbox
 $ pwd
 /Users/sahil/code/sahil87/outbox
 
+$ h outbox/feat-x             # cd into the feat-x worktree of outbox (via wt list --json)
+$ pwd
+/Users/sahil/code/sahil87/outbox.worktrees/feat-x
+
+$ hop ls --trees              # one-shot worktree status across every cloned repo
+outbox    3 trees  (main, feat-x*, hotfix↑2)
+dotfiles  1 tree   (main)
+hop       2 trees  (main, refactor-resolve)
+loom      (not cloned)
+
 $ hop                         # bare → fzf picker over all repos, prints selection
 ```
 
 `h` is the single-letter alias. `hi <name>` (also installed by the shim) bypasses the shim and invokes the binary directly — useful when you want the path printed instead of `cd`'d.
+
+The `/<wt-name>` suffix is optional, completes after `<TAB>` (so `h outbox/<TAB>` lists worktrees), and every verb inherits it — `hop outbox/feat-x where`, `hop outbox/feat-x open`, `hop outbox/feat-x git status`, all work. Bare `hop outbox` is unchanged. `wt` must be on `PATH` for any `/<wt>`-suffixed query.
 
 ### 2. Run anything inside a repo
 
@@ -178,8 +202,10 @@ The shim's rule is simpler than the spec makes it sound: **the first positional 
 | `hop <name> open` | Delegates to wt's app menu. |
 | `hop <name> -R <cmd> ...` | Runs `<cmd> ...` with cwd = repo. |
 | `hop <name> <tool> ...` | Sugar — shim rewrites to `hop -R <name> <tool> ...`. |
+| `hop <name>/<wt>` | Same as `hop <name>` but lands in the named worktree (resolved via `wt list --json`). All verbs above accept the suffix — `<name>/<wt> where`, `<name>/<wt> open`, `<name>/<wt> <tool> ...`, etc. |
+| `hop ls --trees` | Per-repo worktree summary across the registry (`*` = dirty, `↑N` = unpushed commits). |
 
-Tab completion knows which slot you're in: `hop <TAB>` offers subcommands + repo names; `hop outbox <TAB>` offers verbs + tools.
+Tab completion knows which slot you're in: `hop <TAB>` offers subcommands + repo names; `hop outbox <TAB>` offers verbs + tools; `hop outbox/<TAB>` offers worktree names for that repo.
 
 ## Config schema
 
@@ -209,6 +235,7 @@ A flat list (`default` above) uses convention: each URL lands at `<code_root>/<o
 - **Substring match is on the repo name only.** Not URL, not path, not group. `hop ot` matches `outbox` but not the URL `git@github.com:org/outbox.git`. When two repos in different groups share a name, the picker shows `name [group]` to disambiguate.
 - **No `--force` on `push` or `sync`.** Intentional — for nuanced single-repo cases, reach for `hop <name> -R git push --force` and you'll get the full git output. The batch wrappers stay safe by default.
 - **`hop <name> cursor` / `code` need a trailing `.`** — e.g. `hop dotfiles cursor .`. Not a hop quirk: both editors take `[paths...]` as positional args and, when invoked with none, restore the previously open folder instead of opening the cwd. The `.` is what tells them "open *this* directory." Tools that operate on cwd by default (`git status`, `terraform plan`, `ls`, `npm test`) don't need it.
+- **The `<name>/<wt>` suffix needs `wt` on `PATH`.** Hop shells out to `wt list --json` to resolve the worktree name (no state cached in `hop.yaml` — worktrees are wt's domain). Bare `hop <name>` queries never invoke wt. The Homebrew formula pulls wt in as a dependency; for non-brew installs, `brew install sahil87/tap/wt` or build from source.
 
 ## Reference
 
