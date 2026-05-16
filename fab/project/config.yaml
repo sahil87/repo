@@ -2,16 +2,13 @@ agent:
     spawn_command: claude --dangerously-skip-permissions --effort xhigh -n "$(basename "$(pwd)")"
 checklist:
     extra_categories: []
-fab_version: 1.9.3
+fab_version: 1.9.5
 project:
     description: Go CLI for quick repo operations — locate, open, list, and clone repos from hop.yaml.
     name: hop
 source_paths:
     - cmd
     - internal
-true_impact_exclude:
-    - fab/
-    - docs/
 stage_directives:
     apply: []
     hydrate: []
@@ -21,3 +18,6 @@ stage_directives:
         - Use GIVEN/WHEN/THEN for scenarios
         - Mark ambiguities with [NEEDS CLARIFICATION]
     tasks: []
+true_impact_exclude:
+    - fab/
+    - docs/
