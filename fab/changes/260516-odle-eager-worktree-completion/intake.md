@@ -101,7 +101,7 @@ Modify the worktree-resolution sub-step description. Add a note (probably near t
 
 **Code (single function + tests)**:
 - `src/cmd/hop/repo_completion.go` — extend `completeRepoNames`
-- `src/cmd/hop/repo_completion_test.go` — add 4 new test cases (existing tests unchanged)
+- `src/cmd/hop/repo_completion_test.go` — add 5 new test cases (existing tests unchanged)
 
 **No new dependencies, no new flags, no new subcommands, no new package.** Reuses:
 - `rs.MatchOne` (already imported via `repos` package — used by `completeWorktreeCandidates`)

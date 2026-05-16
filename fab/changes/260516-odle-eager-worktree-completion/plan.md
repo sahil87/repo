@@ -15,7 +15,7 @@
 
 ### Phase 3: Integration & Edge Cases
 
-- [x] T002 Add five table-driven test cases to `src/cmd/hop/repo_completion_test.go` covering the eager-branch decision cases from the spec: (a) unique match + 1 worktree → bare-only + no `NoSpace`; (b) unique match + >=2 worktrees → eager-fire with `NoSpace`; (c) unique match + uncloned → bare-only fallback, `listWorktrees` not invoked; (d) unique match + `listWorktrees` errors → bare-only fallback, no stderr; (e) ambiguous prefix (2+ matches) → full names list, `listWorktrees` not invoked. Use the existing `withListWorktrees` seam and `makeCompletionFixture` helper.
+- [x] T002 Add five table-driven test cases to `src/cmd/hop/repo_completion_test.go` covering the eager-branch decision cases from the spec: (a) unique match + 1 worktree → bare-only + no `NoSpace`; (b) unique match + >=2 worktrees → eager-fire with `NoSpace`; (c) unique match + uncloned → bare-only fallback, `listWorktrees` not invoked; (d) unique match + `listWorktrees` errors → bare-only fallback, no stderr; (e) ambiguous prefix (2+ matches) → full names list, `listWorktrees` not invoked. Use the existing `withListWorktrees` seam for injection; build the multi-repo on-disk fixture inline (the table-driven test parameterizes the repo set, so the single-repo `makeCompletionFixture` helper doesn't fit — case (e) needs three repos under one parent dir).
 
 ### Phase 4: Polish
 

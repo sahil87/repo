@@ -702,3 +702,69 @@ func TestCompletionEagerWorktreeExpansion(t *testing.T) {
 		})
 	}
 }
+
+// TestCompletionEagerWorktreeRootOnly asserts that the pre-slash eager
+// expansion fires ONLY for the root command's $1 slot. Non-root subcommands
+// that delegate to completeRepoNames (e.g. `clone` via completeCloneArg)
+// accept only a repo name or URL — surfacing `<repo>/<wt>` candidates there
+// would be misleading. With a unique cloned repo that has >=2 worktrees,
+// `__complete clone outb` must return the bare repo name with the default
+// directive (no NoSpace, no worktree-suffixed candidates) and must NOT invoke
+// `wt list --json`.
+func TestCompletionEagerWorktreeRootOnly(t *testing.T) {
+	makeCompletionFixture(t, "outbox", true)
+	withListWorktrees(t, func(ctx context.Context, repoPath string) ([]WtEntry, error) {
+		t.Fatalf("listWorktrees called from non-root completion with %q; want NOT called", repoPath)
+		return nil, nil
+	})
+
+	stdout, stderr, err := runArgs(t, cobra.ShellCompRequestCmd, "clone", "outb")
+	if err != nil {
+		t.Fatalf("__complete clone outb: %v", err)
+	}
+	cands := candidatesFrom(stdout.String())
+	// Bare repo name must be present; no `outbox/<wt>` candidates may appear.
+	hasBare := false
+	for _, c := range cands {
+		if c == "outbox" {
+			hasBare = true
+		}
+		if strings.HasPrefix(c, "outbox/") {
+			t.Errorf("unexpected worktree-suffixed candidate %q in clone completion: %v", c, cands)
+		}
+	}
+	if !hasBare {
+		t.Errorf("expected bare repo name 'outbox' in candidates, got %v", cands)
+	}
+	if strings.Contains(stderr.String(), "hop:") {
+		t.Errorf("expected no hop-level stderr output, got %q", stderr.String())
+	}
+}
+
+// TestCompletionEagerWorktreeListErrorSilent asserts that case (d) — unique
+// match with `listWorktrees` returning an error — surfaces no hop-level
+// stderr noise through cobra's `__complete` path. The decision-matrix test
+// above (TestCompletionEagerWorktreeExpansion case "d") calls
+// completeRepoNames directly and so never captures stderr from cobra; this
+// integration-level test closes that gap so a future regression that writes
+// to stderr during TAB would fail here.
+func TestCompletionEagerWorktreeListErrorSilent(t *testing.T) {
+	makeCompletionFixture(t, "outbox", true)
+	withListWorktrees(t, func(ctx context.Context, repoPath string) ([]WtEntry, error) {
+		return nil, errors.New("wt list: malformed JSON")
+	})
+
+	stdout, stderr, err := runArgs(t, cobra.ShellCompRequestCmd, "outb")
+	if err != nil {
+		t.Fatalf("__complete outb: %v", err)
+	}
+	cands := candidatesFrom(stdout.String())
+	if len(cands) == 0 {
+		t.Errorf("expected fallback candidates (bare names), got none")
+	}
+	// On listWorktrees error the fallback returns the default names list
+	// with NoFileComp only (no NoSpace), and emits no `hop:` stderr line.
+	if strings.Contains(stderr.String(), "hop:") {
+		t.Errorf("expected no hop-level stderr output on listWorktrees error, got %q", stderr.String())
+	}
+}

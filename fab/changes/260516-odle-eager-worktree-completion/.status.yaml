@@ -2,7 +2,7 @@ id: odle
 name: 260516-odle-eager-worktree-completion
 created: 2026-05-16T14:13:02Z
 created_by: sahil-noon
-change_type: feat
+change_type: fix
 issues: []
 progress:
     intake: done
@@ -23,12 +23,13 @@ confidence:
     tentative: 0
     unresolved: 0
     score: 5.0
+    indicative: true
     fuzzy: true
     dimensions:
         signal: 93.9
-        reversibility: 84.6
-        competence: 85.7
-        disambiguation: 82.1
+        reversibility: 83.6
+        competence: 84.3
+        disambiguation: 80.7
 stage_metrics:
     intake: {started_at: "2026-05-16T14:13:02Z", driver: fab-new, iterations: 1, completed_at: "2026-05-16T14:23:20Z"}
     spec: {started_at: "2026-05-16T14:23:20Z", driver: fab-fff, iterations: 1, completed_at: "2026-05-16T14:25:56Z"}
@@ -50,4 +51,4 @@ true_impact:
     computed_at: "2026-05-16T14:34:27Z"
     computed_at_stage: hydrate
 # true_impact: lazily created on first apply-finish (no placeholder here).
-last_updated: 2026-05-16T14:36:48Z
+last_updated: 2026-05-16T14:49:00Z
